@@ -1,0 +1,92 @@
+\documentclass[a4paper]{scrartcl}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[british]{babel}
+
+\addtokomafont{disposition}{\rmfamily}
+\addtokomafont{descriptionlabel}{\rmfamily}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\usepackage{todonotes}
+
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\usepackage{minted}
+\usemintedstyle{solarizedlight}
+\usepackage{mdframed}
+\surroundwithmdframed{minted}
+
+\setminted[c++]{fontsize=\footnotesize}
+\setminted[glsl]{fontsize=\footnotesize}
+
+\usepackage[sorting=nty,style=numeric]{biblatex}
+\bibliography{references}
+
+\renewcommand{\vec}[1]{\mathbf{#1}}
+\newcommand{\hvec}[1]{\mathbf{\tilde #1}}
+\newcommand{\norm}[1]{\left\Vert #1 \right\Vert}
+
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\title{\LARGE Particle System \\
+    \normalfont \Large Computer Graphics Project}
+
+\author{Per Engström \and Jester Middendorff \and Rasmus Précenth}
+
+\date{\today}
+
+\begin{document}
+\thispagestyle{empty}
+
+\maketitle
+
+\section{Introduction}
+\label{sec:introduction}
+
+See book~\cite{coursebook}.
+
+\begin{minted}{glsl}
+// Fragment shader
+#version 150
+
+uniform float u_time;
+
+out vec4 frag_color;
+
+void main()
+{
+    frag_color = vec4(0.0, 0.5 + 0.5*sin(30), 1.0, 1.0);
+}
+\end{minted}
+
+\begin{minted}{c++}
+GLuint createTriangleVAO()
+{
+    const GLfloat vertices[] = {
+        0.0f, 0.5f, 0.0f,
+        -0.5f,-0.5f, 0.0f,
+        0.5f,-0.5f, 0.0f,
+    };
+
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glEnableVertexAttribArray(POSITION);
+    glVertexAttribPointer(POSITION, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+    return vao;
+}
+\end{minted}
+
+\printbibliography
+
+\end{document}
