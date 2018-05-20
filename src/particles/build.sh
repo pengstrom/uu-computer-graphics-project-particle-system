@@ -6,15 +6,15 @@ then
     exit 1
 fi
 
-export MODEL_VIEWER_ROOT=$ASSIGNMENT3_ROOT/model_viewer && \
+export PARTICLE_ROOT=$ASSIGNMENT3_ROOT/particles && \
 
 # Generate build script
-cd $MODEL_VIEWER_ROOT && \
+cd $PARTICLE_ROOT && \
 if [ ! -d build ]; then
     mkdir build
 fi
 cd build && \
-cmake ../ -DCMAKE_INSTALL_PREFIX=$MODEL_VIEWER_ROOT && \
+cmake ../ -DCMAKE_INSTALL_PREFIX=$PARTICLE_ROOT && \
 
 # Build and install the program
 make -j4 && \
@@ -22,4 +22,4 @@ make install && \
 
 # Run the program
 cd ../bin && \
-./model_viewer
+./particles

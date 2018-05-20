@@ -87,7 +87,7 @@ std::string shaderDir(void)
         std::cout << "Error: ASSIGNMENT3_ROOT is not set." << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    return rootDir + "/model_viewer/src/shaders/";
+    return rootDir + "/particles/src/shaders/";
 }
 
 // Returns the absolute path to the 3D model directory
@@ -98,7 +98,7 @@ std::string modelDir(void)
         std::cout << "Error: ASSIGNMENT3_ROOT is not set." << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    return rootDir + "/model_viewer/3d_models/";
+    return rootDir + "/particles/3d_models/";
 }
 
 // Returns the absolute path to the cubemap texture directory
@@ -109,7 +109,7 @@ std::string cubemapDir(void)
         std::cout << "Error: ASSIGNMENT3_ROOT is not set." << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    return rootDir + "/model_viewer/cubemaps/";
+    return rootDir + "/particles/cubemaps/";
 }
 
 void loadMesh(const std::string &filename, Mesh *mesh)

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.0)
 
 # Specify project name
-project(model_viewer)
+project(particles)
 
 # Specify build type
 set(CMAKE_BUILD_TYPE RelWithDebInfo)
