@@ -1,8 +1,3 @@
-// Assignment 3, Part 1 and 2
-//
-// Modify this file according to the lab instructions.
-//
-
 #include "utils.h"
 #include "utils2.h"
 
@@ -23,36 +18,21 @@
 #include <random>
 
 #define MAX_PARTICLES 10000
+#define MAX_LIFE 5.0f
+#define STRETCH 0.1f
 
 using namespace std;
 using namespace glm;
 
 // The attribute locations we will use in the vertex shader
 enum AttributeLocation {
-    INSTANCE = 0,
-    POSITION_SIZE = 1,
-    COLOUR = 2
+    INSTANCE,
+    POSITION,
+    SIZE,
+    LIFE,
+    COLOUR,
+    NUM_ATTRIBUTES
 };
-
-/*
-// Struct for representing an indexed triangle mesh
-struct Mesh {
-    std::vector<glm::vec3> vertices;
-    std::vector<glm::vec3> normals;
-    std::vector<uint32_t> indices;
-};
-
-// Struct for representing a vertex array object (VAO) created from a
-// mesh. Used for rendering.
-struct MeshVAO {
-    GLuint vao;
-    GLuint vertexVBO;
-    GLuint normalVBO;
-    GLuint indexVBO;
-    int numVertices;
-    int numIndices;
-};
-*/
 
 struct Particle {
     vec3 pos;
@@ -71,11 +51,20 @@ struct Particle {
 
 struct Particles {
     Particle container[MAX_PARTICLES];
-    GLuint billboard;
-    GLuint positionSizes;
-    GLuint colours;
-    GLfloat positionSizesData[4*MAX_PARTICLES];
+
+    // Buffer identifiers
+    GLuint billboardBuffer;
+    GLuint positionsBuffer;
+    GLuint sizesBuffer;
+    GLuint livesBuffer;
+    GLuint coloursBuffer;
+
+    // Data for buffers
+    GLfloat positionsData[3*MAX_PARTICLES];
+    GLfloat sizesData[MAX_PARTICLES];
+    GLfloat livesData[MAX_PARTICLES];
     GLubyte coloursData[4*MAX_PARTICLES];
+
     int lastUsedParticle;
     int numParticles;
 };
@@ -93,19 +82,8 @@ struct Context {
     Trackball trackball;
     GLuint vao;
     Particles *particles;
-    //Mesh mesh;
-    //MeshVAO meshVAO;
-    //GLuint defaultVAO;
-    //GLuint cubemap;
     float elapsed_time;
     float timeDelta;
-    //bool ambient;
-    //bool diffuse;
-    //bool specular;
-    //bool drawNormals;
-    //bool gammaCorrect;
-    //std::vector<GLuint> cubemaps;
-    //int cubemapIdx;
     float zoom;
 };
 
@@ -132,76 +110,6 @@ std::string shaderDir(void)
     return rootDir + "/particles/src/shaders/";
 }
 
-/*
-// Returns the absolute path to the 3D model directory
-std::string modelDir(void)
-{
-    std::string rootDir = getEnvVar("ASSIGNMENT3_ROOT");
-    if (rootDir.empty()) {
-        std::cout << "Error: ASSIGNMENT3_ROOT is not set." << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
-    return rootDir + "/particles/3d_models/";
-}
-
-// Returns the absolute path to the cubemap texture directory
-std::string cubemapDir(void)
-{
-    std::string rootDir = getEnvVar("ASSIGNMENT3_ROOT");
-    if (rootDir.empty()) {
-        std::cout << "Error: ASSIGNMENT3_ROOT is not set." << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
-    return rootDir + "/particles/cubemaps/";
-}
-
-void loadMesh(const std::string &filename, Mesh *mesh)
-{
-    OBJMesh obj_mesh;
-    objMeshLoad(obj_mesh, filename);
-    mesh->vertices = obj_mesh.vertices;
-    mesh->normals = obj_mesh.normals;
-    mesh->indices = obj_mesh.indices;
-}
-
-void createMeshVAO(Context &ctx, const Mesh &mesh, MeshVAO *meshVAO)
-{
-    // Generates and populates a VBO for the vertices
-    glGenBuffers(1, &(meshVAO->vertexVBO));
-    glBindBuffer(GL_ARRAY_BUFFER, meshVAO->vertexVBO);
-    auto verticesNBytes = mesh.vertices.size() * sizeof(mesh.vertices[0]);
-    glBufferData(GL_ARRAY_BUFFER, verticesNBytes, mesh.vertices.data(), GL_STATIC_DRAW);
-
-    // Generates and populates a VBO for the vertex normals
-    glGenBuffers(1, &(meshVAO->normalVBO));
-    glBindBuffer(GL_ARRAY_BUFFER, meshVAO->normalVBO);
-    auto normalsNBytes = mesh.normals.size() * sizeof(mesh.normals[0]);
-    glBufferData(GL_ARRAY_BUFFER, normalsNBytes, mesh.normals.data(), GL_STATIC_DRAW);
-
-    // Generates and populates a VBO for the element indices
-    glGenBuffers(1, &(meshVAO->indexVBO));
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, meshVAO->indexVBO);
-    auto indicesNBytes = mesh.indices.size() * sizeof(mesh.indices[0]);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indicesNBytes, mesh.indices.data(), GL_STATIC_DRAW);
-
-    // Creates a vertex array object (VAO) for drawing the mesh
-    glGenVertexArrays(1, &(meshVAO->vao));
-    glBindVertexArray(meshVAO->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, meshVAO->vertexVBO);
-    glEnableVertexAttribArray(POSITION);
-    glVertexAttribPointer(POSITION, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glBindBuffer(GL_ARRAY_BUFFER, meshVAO->normalVBO);
-    glEnableVertexAttribArray(NORMAL);
-    glVertexAttribPointer(NORMAL, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, meshVAO->indexVBO);
-    glBindVertexArray(ctx.defaultVAO); // unbinds the VAO
-
-    // Additional information required by draw calls
-    meshVAO->numVertices = mesh.vertices.size();
-    meshVAO->numIndices = mesh.indices.size();
-}
-*/
-
 void initializeTrackball(Context &ctx)
 {
     double radius = double(std::min(ctx.width, ctx.height)) / 2.0;
@@ -227,29 +135,46 @@ void initParticles(Context *ctx)
     };
 
     GLuint billboard;
-    GLuint positionSizes;
+    GLuint positions;
+    GLuint sizes;
+    GLuint lives;
     GLuint colours;
 
-    // The billboard quad
-    // This is done only once
+    // The billboard quad. This is done only once
     glGenBuffers(1, &billboard);
-    particles->billboard = billboard;
+    particles->billboardBuffer = billboard;
 
     glBindBuffer(GL_ARRAY_BUFFER, billboard);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
 
-    // The positions and sizes of the particles
-    glGenBuffers(1, &positionSizes);
-    particles->positionSizes = positionSizes;
+    // The positions of the particles
+    glGenBuffers(1, &positions);
+    particles->positionsBuffer = positions;
 
-    glBindBuffer(GL_ARRAY_BUFFER, positionSizes);
-    glBufferData(GL_ARRAY_BUFFER, 4 * MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, positions);
+    glBufferData(GL_ARRAY_BUFFER, 3 * MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+
+
+    // The sizes of the particles
+    glGenBuffers(1, &sizes);
+    particles->sizesBuffer = sizes;
+
+    glBindBuffer(GL_ARRAY_BUFFER, sizes);
+    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+
+
+    // The lives of the particles
+    glGenBuffers(1, &lives);
+    particles->livesBuffer = lives;
+
+    glBindBuffer(GL_ARRAY_BUFFER, lives);
+    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
 
 
     // The colours of the particles
     glGenBuffers(1, &colours);
-    particles->colours = colours;
+    particles->coloursBuffer = colours;
 
     glBindBuffer(GL_ARRAY_BUFFER, colours);
     glBufferData(GL_ARRAY_BUFFER, 4 * MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
@@ -278,117 +203,15 @@ void init(Context &ctx)
 
     initParticles(&ctx);
 
-    //loadMesh((modelDir() + "gargo.obj"), &ctx.mesh);
-    //createMeshVAO(ctx, ctx.mesh, &ctx.meshVAO);
-
-    //ctx.cubemaps = std::vector<GLuint>();
-
-    /*
-    std::vector<std::string> dirs = std::vector<std::string>();
-    dirs.push_back("0.125");
-    dirs.push_back("0.5");
-    dirs.push_back("2");
-    dirs.push_back("8");
-    dirs.push_back("32");
-    dirs.push_back("128");
-    dirs.push_back("512");
-    dirs.push_back("2048");
-
-    // Load cubemap texture(s)
-    for (int i = 0; i < 8; ++i) {
-        std::string dir = dirs[i];
-        ctx.cubemaps.push_back(loadCubemap(cubemapDir() + "/Forrest/prefiltered/" + dir + "/"));
-    }
-    */
-
     initializeTrackball(ctx);
 }
 
 /*
-// MODIFY THIS FUNCTION
-void drawMesh(Context &ctx, GLuint program, const MeshVAO &meshVAO)
-{
-
-    glm::vec3 centre = glm::vec3(0.0f);
-    glm::vec3 cameraPos = glm::vec3(4.0f,4.0f,4.0f);
-
-    float fov = 0.5f;
-    
-    glm::vec3 lightPos = glm::vec3(-1.0f,1.0f,1.0f);
-    glm::vec3 lightCol = glm::vec3(1.0f,1.0f,1.0f);
-
-    glm::vec3 ambientCol = glm::vec3(0.01f,0.0f,0.0f);
-    glm::vec3 diffuseCol = glm::vec3(0.5f,0.0f,0.0f);
-    glm::vec3 specularCol = glm::vec3(0.04f);
-    float specPow = 32.0f;
-
-    if (!ctx.ambient) {
-        ambientCol = glm::vec3(0.0f);
-    }
-
-    if (!ctx.diffuse) {
-        diffuseCol = glm::vec3(0.0f);
-    }
-
-    if (!ctx.specular) {
-        specularCol = glm::vec3(0.0f);
-    }
-
-    // Define uniforms
-    glm::mat4 model = trackballGetRotationMatrix(ctx.trackball);
-              model = glm::rotate(model, 0.25f*ctx.elapsed_time, glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 view = glm::lookAt(cameraPos, centre, glm::vec3(0.0f,1.0f,0.0f));
-    //glm::mat4 projection = glm::ortho(-ctx.aspect, ctx.aspect, -1.0f, 1.0f, -1.0f, 1.0f);
-    glm::mat4 projection = glm::perspective(fov*ctx.zoom, ctx.aspect, 0.1f, 100.0f);
-    glm::mat4 mv = view * model;
-    glm::mat4 mvp = projection * mv;
-
-    glm::mat4 normalMatrix = glm::transpose(glm::inverse(mv));
-
-
-    // Activate program
-    glUseProgram(program);
-
-    // Bind textures
-    // ...
-
-    // Pass uniforms
-    glUniformMatrix4fv(glGetUniformLocation(program, "u_m"), 1, GL_FALSE, &model[0][0]);
-    glUniformMatrix4fv(glGetUniformLocation(program, "u_v"), 1, GL_FALSE, &view[0][0]);
-    glUniformMatrix4fv(glGetUniformLocation(program, "u_mv"), 1, GL_FALSE, &mv[0][0]);
-    glUniformMatrix4fv(glGetUniformLocation(program, "u_mvp"), 1, GL_FALSE, &mvp[0][0]);
-    glUniformMatrix4fv(glGetUniformLocation(program, "u_normal_matrix"), 1, GL_FALSE, &normalMatrix[0][0]);
-    glUniform1f(glGetUniformLocation(program, "u_time"), ctx.elapsed_time);
-
-    glUniform3fv(glGetUniformLocation(program, "u_light_pos"), 1, &lightPos[0]);
-    glUniform3fv(glGetUniformLocation(program, "u_light_col"), 1, &lightCol[0]);
-
-    glUniform1f(glGetUniformLocation(program, "u_spc_pow"), specPow);
-    glUniform3fv(glGetUniformLocation(program, "u_amb_col"), 1, &ambientCol[0]);
-    glUniform3fv(glGetUniformLocation(program, "u_dif_col"), 1, &diffuseCol[0]);
-    glUniform3fv(glGetUniformLocation(program, "u_spc_col"), 1, &specularCol[0]);
-
-    glUniform3fv(glGetUniformLocation(program, "u_camera_pos"), 1, &cameraPos[0]);
-
-    glUniform1i(glGetUniformLocation(program, "u_draw_norm"), ctx.drawNormals);
-    glUniform1i(glGetUniformLocation(program, "u_gamma_correct"), ctx.gammaCorrect);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, ctx.cubemaps[ctx.cubemapIdx]);
-
-    glUniform1i(glGetUniformLocation(program, "u_cubemap"), 0);
-
-    // Draw!
-    glBindVertexArray(meshVAO.vao);
-        glDrawElements(GL_TRIANGLES, meshVAO.numIndices, GL_UNSIGNED_INT, 0);
-    glBindVertexArray(ctx.defaultVAO);
-}
-*/
-
 void orphanParticleBuffer()
 {
     glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * 4 * sizeof(GLuint), NULL, GL_STREAM_DRAW);
 }
+*/
 
 void drawParticles(Context *ctx)
 {
@@ -402,6 +225,7 @@ void drawParticles(Context *ctx)
     GLuint camera_up_id = glGetUniformLocation(ctx->program, "camera_up");
     GLuint camera_right_id = glGetUniformLocation(ctx->program, "camera_right");
     GLuint vp_id = glGetUniformLocation(ctx->program, "vp");
+    GLuint max_life_id = glGetUniformLocation(ctx->program, "max_life");
 
     vec3 centre = vec3(0.0f, 0.0f, 0.0f);
     vec3 cameraPos = ctx->cameraPos;
@@ -417,6 +241,7 @@ void drawParticles(Context *ctx)
     vec3 camera_right = vec3(view[0][0], view[1][0], view[2][0]);
 
     // Set uniforms
+    glUniform1f(max_life_id, MAX_LIFE * STRETCH);
     glUniform3fv(camera_up_id, 1, &camera_up[0]);
     glUniform3fv(camera_right_id, 1, &camera_right[0]);
     glUniformMatrix4fv(vp_id, 1, GL_FALSE, &vp[0][0]);
@@ -428,50 +253,78 @@ void drawParticles(Context *ctx)
 
     // Particle data
     Particles *particles = ctx->particles;
-    GLuint billboard = particles->billboard;
-    GLuint positionSizes = particles->positionSizes;
-    GLuint colours = particles->colours;
+    GLuint billboard = particles->billboardBuffer;
+    GLuint positions = particles->positionsBuffer;
+    GLuint sizes = particles->sizesBuffer;
+    GLuint lives = particles->livesBuffer;
+    GLuint colours = particles->coloursBuffer;
     int numParticles = particles->numParticles;
 
-    // Update particle positions and sizes
-    glBindBuffer(GL_ARRAY_BUFFER, positionSizes);
-    orphanParticleBuffer();
-    glBufferSubData(GL_ARRAY_BUFFER, 0, numParticles * sizeof(GLfloat) * 4, particles->positionSizesData);
+    // Update particle positions
+    glBindBuffer(GL_ARRAY_BUFFER, positions);
+    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * 3 * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, numParticles * sizeof(GLfloat) * 3, particles->positionsData);
+
+    // Update particle sizes
+    glBindBuffer(GL_ARRAY_BUFFER, sizes);
+    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, numParticles * sizeof(GLfloat), particles->sizesData);
+
+    // Update particle lives
+    glBindBuffer(GL_ARRAY_BUFFER, lives);
+    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, numParticles * sizeof(GLfloat), particles->livesData);
 
     // Update particle colours
     glBindBuffer(GL_ARRAY_BUFFER, colours);
-    orphanParticleBuffer();
+    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * 3 * sizeof(GLubyte), NULL, GL_STREAM_DRAW);
     glBufferSubData(GL_ARRAY_BUFFER, 0, numParticles * sizeof(GLubyte) * 4, particles->coloursData);
 
 
     // Attach billboard corners to the vertices
-    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(INSTANCE);
     glBindBuffer(GL_ARRAY_BUFFER, billboard);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+    glVertexAttribPointer(INSTANCE, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
-    // Attach particle positions and sizes to the vertices
-    glEnableVertexAttribArray(1);
-    glBindBuffer(GL_ARRAY_BUFFER, positionSizes);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, (void*)0);
+    // Attach particle positions to the vertices
+    glEnableVertexAttribArray(POSITION);
+    glBindBuffer(GL_ARRAY_BUFFER, positions);
+    glVertexAttribPointer(POSITION, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+    // Attach particle sizes to the vertices
+    glEnableVertexAttribArray(SIZE);
+    glBindBuffer(GL_ARRAY_BUFFER, sizes);
+    glVertexAttribPointer(SIZE, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+    // Attach particle lives to the vertices
+    glEnableVertexAttribArray(LIFE);
+    glBindBuffer(GL_ARRAY_BUFFER, lives);
+    glVertexAttribPointer(LIFE, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
 
     // Attach colours to the vertices
-    glEnableVertexAttribArray(2);
+    glEnableVertexAttribArray(COLOUR);
     glBindBuffer(GL_ARRAY_BUFFER, colours);
-    glVertexAttribPointer(2, 4, GL_UNSIGNED_SHORT, GL_TRUE, 0, (void*)0);
+    glVertexAttribPointer(COLOUR, 4, GL_UNSIGNED_SHORT, GL_TRUE, 0, nullptr);
 
     // The billboard is the same for each particle
-    glVertexAttribDivisor(0,0);
-    // The particle position and sized advance for each particle
-    glVertexAttribDivisor(1,1);
+    glVertexAttribDivisor(INSTANCE,0);
+    // The particle position advance for each particle
+    glVertexAttribDivisor(POSITION,1);
+    // The particle sized advance for each particle
+    glVertexAttribDivisor(SIZE,1);
+    // The particle sized advance for each particle
+    glVertexAttribDivisor(LIFE,1);
     // The particle colours advance for each particle
-    glVertexAttribDivisor(2,1);
+    glVertexAttribDivisor(COLOUR,1);
 
     // Draw all particle instances
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, numParticles);
     
-    glDisableVertexAttribArray(0);
-    glDisableVertexAttribArray(1);
-    glDisableVertexAttribArray(2);
+    glDisableVertexAttribArray(POSITION);
+    glDisableVertexAttribArray(INSTANCE);
+    glDisableVertexAttribArray(COLOUR);
+    glDisableVertexAttribArray(SIZE);
+    glDisableVertexAttribArray(LIFE);
 }
 
 void display(Context *ctx)
@@ -491,38 +344,6 @@ void reloadShaders(Context *ctx)
     ctx->program = loadShaderProgram(shaderDir() + "particle.vert",
                                      shaderDir() + "particle.frag");
 }
-
-/*
-void toggleAmbient(Context *ctx)
-{
-    ctx->ambient = !ctx->ambient;
-}
-
-void toggleDiffuse(Context *ctx)
-{
-    ctx->diffuse = !ctx->diffuse;
-}
-
-void toggleSpecular(Context *ctx)
-{
-    ctx->specular = !ctx->specular;
-}
-
-void toggleDrawNormals(Context *ctx)
-{
-    ctx->drawNormals = !ctx->drawNormals;
-}
-
-void toggleGammaCorrection(Context *ctx)
-{
-    ctx->gammaCorrect = !ctx->gammaCorrect;
-}
-
-void cycleCubemaps(Context *ctx)
-{
-    ctx->cubemapIdx = (ctx->cubemapIdx + 1) % 8;
-}
-*/
 
 void mouseButtonPressed(Context *ctx, int button, int x, int y)
 {
@@ -567,26 +388,6 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
     if (key == GLFW_KEY_R && action == GLFW_PRESS) {
         reloadShaders(ctx);
     }
-    /*
-    if (key == GLFW_KEY_A && action == GLFW_PRESS) {
-        toggleAmbient(ctx);
-    }
-    if (key == GLFW_KEY_D && action == GLFW_PRESS) {
-        toggleDiffuse(ctx);
-    }
-    if (key == GLFW_KEY_S && action == GLFW_PRESS) {
-        toggleSpecular(ctx);
-    }
-    if (key == GLFW_KEY_N && action == GLFW_PRESS) {
-        toggleDrawNormals(ctx);
-    }
-    if (key == GLFW_KEY_G && action == GLFW_PRESS) {
-        toggleGammaCorrection(ctx);
-    }
-    if (key == GLFW_KEY_C && action == GLFW_PRESS) {
-        cycleCubemaps(ctx);
-    }
-    */
 }
 
 void charCallback(GLFWwindow* window, unsigned int codepoint)
@@ -666,42 +467,46 @@ void simulateParticles(Context *ctx)
     Particles *particles = ctx->particles;
     Particle *container = particles->container;
 
-    GLfloat *positionSizesData = particles->positionSizesData;
+    GLfloat *positionsData = particles->positionsData;
+    GLfloat *sizesData = particles->sizesData;
+    GLfloat *livesData = particles->livesData;
     GLubyte *coloursData = particles->coloursData;
 
-    float delta = ctx->timeDelta;
+    float delta = ctx->timeDelta * STRETCH;
 
     vec3 cameraPos = ctx->cameraPos;
 
     // Spawn 10 particles per millisecond
-    int newparticles = (int)(ctx->timeDelta*100.0);
-    if (newparticles > (int)(0.016f*100.0))
-        newparticles = (int)(0.016f*100.0);
+    int newparticles = (int)(delta*10000.0);
+    if (newparticles > (int)(0.016f*10000.0))
+        newparticles = (int)(0.016f*10000.0);
 
     for(int i=0; i<newparticles; i++){
         int particleIndex = findUnusedParticle(particles);
-        container[particleIndex].life = 2.0f; // This particle will live 5 seconds.
-        container[particleIndex].pos = glm::vec3(0,0.0f,0.0f);
 
-        float spread = 1.5f;
-        vec3 maindir = vec3(0.0f, 10.0f, 0.0f);
+        Particle &p = container[particleIndex];
+
+        p.life = MAX_LIFE*STRETCH;
+        p.pos = glm::vec3(0,0.0f,0.0f);
+
+        float spread = 4.0f;
+        vec3 maindir = vec3(0.0f, 2.0f, 0.0f);
         vec3 randomdir = vec3(
             (ctx->rand255(ctx->eng)%2000 - 1000.0f)/1000.0f,
             (ctx->rand255(ctx->eng)%2000 - 1000.0f)/1000.0f,
             (ctx->rand255(ctx->eng)%2000 - 1000.0f)/1000.0f
         );
 
-        container[particleIndex].speed = maindir + randomdir*spread;
-        container[particleIndex].speed *= 0.1f;
+        p.speed = maindir + randomdir*spread;
 
         // Very bad way to generate a random color
-        container[particleIndex].color.r = ctx->rand255(ctx->eng);
-        container[particleIndex].color.g = ctx->rand255(ctx->eng);
-        container[particleIndex].color.b = ctx->rand255(ctx->eng);
-        container[particleIndex].color.a = (ctx->rand255(ctx->eng) % 256) / 3;
+        p.color.r = ctx->rand255(ctx->eng);
+        p.color.g = ctx->rand255(ctx->eng);
+        p.color.b = ctx->rand255(ctx->eng);
+        p.color.a = (ctx->rand255(ctx->eng) % 256) / 3;
 
-        container[particleIndex].size = (ctx->rand255(ctx->eng)%1000)/2000.0f + 0.1f;
-
+        //p.size = (ctx->rand255(ctx->eng)%1000)/2000.0f + 0.1f;
+        p.size = 0.1f;
     }
 
     int numParticles = 0;
@@ -716,16 +521,18 @@ void simulateParticles(Context *ctx)
             p.life -= delta;
             if (p.life > 0.0f){
 
-                p.speed += glm::vec3(0.0f,-.981f, 0.0f) * (float)delta * 0.5f;
+                p.speed += glm::vec3(0.0f,-9.81f, 0.0f) * (float)delta;
                 p.pos += p.speed * (float)delta;
                 p.cameraDistance = glm::length2(p.pos - cameraPos);
                 //ParticlesContainer[i].pos += glm::vec3(0.0f,10.0f, 0.0f) * (float)delta;
 
-                positionSizesData[4*numParticles+0] = p.pos.x;
-                positionSizesData[4*numParticles+1] = p.pos.y;
-                positionSizesData[4*numParticles+2] = p.pos.z;
+                positionsData[3*numParticles+0] = p.pos.x;
+                positionsData[3*numParticles+1] = p.pos.y;
+                positionsData[3*numParticles+2] = p.pos.z;
 
-                positionSizesData[4*numParticles+3] = p.size;
+                sizesData[numParticles] = p.size;
+
+                livesData[numParticles] = p.life;
 
                 coloursData[4*numParticles+0] = p.color.r;
                 coloursData[4*numParticles+1] = p.color.g;
@@ -771,14 +578,6 @@ int main(void)
     ctx.zoom = 1.0f;
     ctx.timeDelta = 0.016f;
     ctx.cameraPos = glm::vec3(4.0f,4.0f,4.0f);
-    /*
-    ctx.ambient = true;
-    ctx.diffuse = true;
-    ctx.specular = true;
-    ctx.drawNormals = false;
-    ctx.gammaCorrect = true;
-    ctx.cubemapIdx = 0;
-    */
     ctx.eng = eng;
     ctx.rand255 = rand255;
 
@@ -804,10 +603,6 @@ int main(void)
     // Initialize GUI
     ImGui_ImplGlfwGL3_Init(ctx.window, false /*do not install callbacks*/);
 
-    // Initialize rendering
-    //glGenVertexArrays(1, &ctx.defaultVAO);
-    //glBindVertexArray(ctx.defaultVAO);
-    //glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     init(ctx);
 
     // Start rendering loop
