@@ -20,15 +20,18 @@
 #include <cstdlib>
 #include <algorithm>
 
-#define MAX_PARTICLES 100000
+#include <random>
+
+#define MAX_PARTICLES 10000
 
 using namespace std;
 using namespace glm;
 
 // The attribute locations we will use in the vertex shader
 enum AttributeLocation {
-    POSITION = 0,
-    NORMAL = 1
+    INSTANCE = 0,
+    POSITION_SIZE = 1,
+    COLOUR = 2
 };
 
 /*
@@ -54,7 +57,7 @@ struct MeshVAO {
 struct Particle {
     vec3 pos;
     vec3 speed;
-    vec4 color;
+    uvec4 color;
     float size;
     float angle;
     float weight;
@@ -72,13 +75,15 @@ struct Particles {
     GLuint positionSizes;
     GLuint colours;
     GLfloat positionSizesData[4*MAX_PARTICLES];
-    GLfloat coloursData[4*MAX_PARTICLES];
+    GLubyte coloursData[4*MAX_PARTICLES];
     int lastUsedParticle;
     int numParticles;
 };
 
 // Struct for resources and state
 struct Context {
+    mt19937 eng;
+    uniform_int_distribution<> rand255;
     int width;
     int height;
     float aspect;
@@ -217,8 +222,8 @@ void initParticles(Context *ctx)
     static const GLfloat vertices[] = {
         -0.5f, -0.5f, 0.0f,
         0.5f, -0.5f, 0.0f,
-        0.5f, 0.5f, 0.0f,
-        -0.5f, 0.5f, 0.0f
+        -0.5f, 0.5f, 0.0f,
+        0.5f, 0.5f, 0.0f
     };
 
     GLuint billboard;
@@ -408,8 +413,8 @@ void drawParticles(Context *ctx)
     mat4 vp = projection * view;
 
     // Camera-local directions for billboarding
-    vec3 camera_up = vec3(vp[0][1], vp[1][1], vp[2][1]);
-    vec3 camera_right = vec3(vp[0][1], vp[1][0], vp[2][0]);
+    vec3 camera_up = vec3(view[0][1], view[1][1], view[2][1]);
+    vec3 camera_right = vec3(view[0][0], view[1][0], view[2][0]);
 
     // Set uniforms
     glUniform3fv(camera_up_id, 1, &camera_up[0]);
@@ -461,8 +466,6 @@ void drawParticles(Context *ctx)
     // The particle colours advance for each particle
     glVertexAttribDivisor(2,1);
 
-    printf("Drawing %d particles.\n", particles->numParticles);
-
     // Draw all particle instances
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, numParticles);
     
@@ -478,31 +481,6 @@ void display(Context *ctx)
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    /*
-    glUseProgram(ctx->program);
-    static const GLfloat vertices[] ={
-        -0.5f, -0.5f, 0.0f,
-        0.5f, -0.5f, 0.0f,
-        0.0f, 0.5f, 0.0f
-    };
-
-    GLuint buffer;
-    GLuint vao;
-
-    glGenBuffers(1, &buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, buffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, buffer);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-
-    glDraw
-    */
     
     drawParticles(ctx);
 }
@@ -689,40 +667,40 @@ void simulateParticles(Context *ctx)
     Particle *container = particles->container;
 
     GLfloat *positionSizesData = particles->positionSizesData;
-    GLfloat *coloursData = particles->coloursData;
+    GLubyte *coloursData = particles->coloursData;
 
     float delta = ctx->timeDelta;
 
     vec3 cameraPos = ctx->cameraPos;
 
-    int newparticles = (int)(ctx->timeDelta*10000.0);
-    if (newparticles > (int)(0.016f*10000.0))
-        newparticles = (int)(0.016f*10000.0);
-
     // Spawn 10 particles per millisecond
+    int newparticles = (int)(ctx->timeDelta*100.0);
+    if (newparticles > (int)(0.016f*100.0))
+        newparticles = (int)(0.016f*100.0);
+
     for(int i=0; i<newparticles; i++){
         int particleIndex = findUnusedParticle(particles);
-        container[particleIndex].life = 5.0f; // This particle will live 5 seconds.
-        container[particleIndex].pos = glm::vec3(0,0,0.0f);
+        container[particleIndex].life = 2.0f; // This particle will live 5 seconds.
+        container[particleIndex].pos = glm::vec3(0,0.0f,0.0f);
 
         float spread = 1.5f;
         vec3 maindir = vec3(0.0f, 10.0f, 0.0f);
         vec3 randomdir = vec3(
-            (rand()%2000 - 1000.0f)/1000.0f,
-            (rand()%2000 - 1000.0f)/1000.0f,
-            (rand()%2000 - 1000.0f)/1000.0f
+            (ctx->rand255(ctx->eng)%2000 - 1000.0f)/1000.0f,
+            (ctx->rand255(ctx->eng)%2000 - 1000.0f)/1000.0f,
+            (ctx->rand255(ctx->eng)%2000 - 1000.0f)/1000.0f
         );
 
         container[particleIndex].speed = maindir + randomdir*spread;
-
+        container[particleIndex].speed *= 0.1f;
 
         // Very bad way to generate a random color
-        container[particleIndex].color.x = rand() % 256;
-        container[particleIndex].color.y = rand() % 256;
-        container[particleIndex].color.z = rand() % 256;
-        container[particleIndex].color.w = (rand() % 256) / 3;
+        container[particleIndex].color.r = ctx->rand255(ctx->eng);
+        container[particleIndex].color.g = ctx->rand255(ctx->eng);
+        container[particleIndex].color.b = ctx->rand255(ctx->eng);
+        container[particleIndex].color.a = (ctx->rand255(ctx->eng) % 256) / 3;
 
-        container[particleIndex].size = (rand()%1000)/2000.0f + 0.1f;
+        container[particleIndex].size = (ctx->rand255(ctx->eng)%1000)/2000.0f + 0.1f;
 
     }
 
@@ -738,7 +716,7 @@ void simulateParticles(Context *ctx)
             p.life -= delta;
             if (p.life > 0.0f){
 
-                p.speed += glm::vec3(0.0f,-9.81f, 0.0f) * (float)delta * 0.5f;
+                p.speed += glm::vec3(0.0f,-.981f, 0.0f) * (float)delta * 0.5f;
                 p.pos += p.speed * (float)delta;
                 p.cameraDistance = glm::length2(p.pos - cameraPos);
                 //ParticlesContainer[i].pos += glm::vec3(0.0f,10.0f, 0.0f) * (float)delta;
@@ -749,10 +727,10 @@ void simulateParticles(Context *ctx)
 
                 positionSizesData[4*numParticles+3] = p.size;
 
-                coloursData[4*numParticles+0] = p.color.x;
-                coloursData[4*numParticles+1] = p.color.y;
-                coloursData[4*numParticles+2] = p.color.z;
-                coloursData[4*numParticles+3] = p.color.w;
+                coloursData[4*numParticles+0] = p.color.r;
+                coloursData[4*numParticles+1] = p.color.g;
+                coloursData[4*numParticles+2] = p.color.b;
+                coloursData[4*numParticles+3] = p.color.a;
 
             }else{
                 p.cameraDistance = -1.0f;
@@ -770,6 +748,10 @@ void simulateParticles(Context *ctx)
 
 int main(void)
 {
+    random_device rd;
+    mt19937 eng(rd());
+    std::uniform_int_distribution<> rand255(0, 255); // define the range
+
     Context ctx;
 
     // Create a GLFW window
@@ -797,6 +779,8 @@ int main(void)
     ctx.gammaCorrect = true;
     ctx.cubemapIdx = 0;
     */
+    ctx.eng = eng;
+    ctx.rand255 = rand255;
 
     glfwMakeContextCurrent(ctx.window);
     glfwSetWindowUserPointer(ctx.window, &ctx);
@@ -834,8 +818,11 @@ int main(void)
         ctx.elapsed_time = newTime;
         ctx.timeDelta = timeDelta;
         ImGui_ImplGlfwGL3_NewFrame();
+
         simulateParticles(&ctx);
+
         display(&ctx);
+
         ImGui::Render();
         glfwSwapBuffers(ctx.window);
     }
