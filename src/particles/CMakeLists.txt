@@ -5,6 +5,7 @@ project(particles)
 
 # Specify build type
 set(CMAKE_BUILD_TYPE RelWithDebInfo)
+set( CMAKE_EXPORT_COMPILE_COMMANDS ON )
 
 # Set extra compiler flags
 if(UNIX AND NOT APPLE)
@@ -59,3 +60,5 @@ target_link_libraries(${PROJECT_NAME} glfw ${PROJECT_LIBRARIES} ${GLFW_LIBRARIES
 
 # Install executable
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+
+

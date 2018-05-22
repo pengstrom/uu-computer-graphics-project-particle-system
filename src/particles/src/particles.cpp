@@ -20,12 +20,18 @@
 #include <cstdlib>
 #include <algorithm>
 
+#define MAX_PARTICLES 100000
+
+using namespace std;
+using namespace glm;
+
 // The attribute locations we will use in the vertex shader
 enum AttributeLocation {
     POSITION = 0,
     NORMAL = 1
 };
 
+/*
 // Struct for representing an indexed triangle mesh
 struct Mesh {
     std::vector<glm::vec3> vertices;
@@ -43,6 +49,28 @@ struct MeshVAO {
     int numVertices;
     int numIndices;
 };
+*/
+
+struct Particle {
+    vec3 pos;
+    vec3 speed;
+    vec4 color;
+    float size;
+    float angle;
+    float weight;
+    float life;
+};
+
+struct Particles {
+    Particle particles[MAX_PARTICLES];
+    GLuint billboard;
+    GLuint positionSizes;
+    GLuint colours;
+    GLfloat positionSizesData[4*MAX_PARTICLES];
+    GLfloat coloursData[4*MAX_PARTICLES];
+    int lastUsedParticle;
+    int numParticles;
+};
 
 // Struct for resources and state
 struct Context {
@@ -52,18 +80,19 @@ struct Context {
     GLFWwindow *window;
     GLuint program;
     Trackball trackball;
-    Mesh mesh;
-    MeshVAO meshVAO;
-    GLuint defaultVAO;
-    GLuint cubemap;
+    Particles *particles;
+    //Mesh mesh;
+    //MeshVAO meshVAO;
+    //GLuint defaultVAO;
+    //GLuint cubemap;
     float elapsed_time;
-    bool ambient;
-    bool diffuse;
-    bool specular;
-    bool drawNormals;
-    bool gammaCorrect;
-    std::vector<GLuint> cubemaps;
-    int cubemapIdx;
+    //bool ambient;
+    //bool diffuse;
+    //bool specular;
+    //bool drawNormals;
+    //bool gammaCorrect;
+    //std::vector<GLuint> cubemaps;
+    //int cubemapIdx;
     float zoom;
 };
 
@@ -90,6 +119,7 @@ std::string shaderDir(void)
     return rootDir + "/particles/src/shaders/";
 }
 
+/*
 // Returns the absolute path to the 3D model directory
 std::string modelDir(void)
 {
@@ -157,6 +187,7 @@ void createMeshVAO(Context &ctx, const Mesh &mesh, MeshVAO *meshVAO)
     meshVAO->numVertices = mesh.vertices.size();
     meshVAO->numIndices = mesh.indices.size();
 }
+*/
 
 void initializeTrackball(Context &ctx)
 {
@@ -166,16 +197,70 @@ void initializeTrackball(Context &ctx)
     ctx.trackball.center = center;
 }
 
+void initParticles(Context *ctx)
+{
+    Particles *particles = (Particles*) malloc(sizeof(struct Particles));
+    if (particles == NULL) {
+        fprintf(stderr, "Failed to allocate %x bytes of memory. Exiting.", sizeof(struct Particles));
+        exit(-1);
+    }
+
+    // A quad
+    static const GLfloat vertices[] = {
+        -0.5f, -0.5f, 0.0f,
+        0.5f, -0.5f, 0.0f,
+        0.5f, 0.5f, 0.0f,
+        -0.5f, 0.5f, 0.0f
+    };
+
+    GLuint billboard;
+    GLuint positionSizes;
+    GLuint colours;
+
+
+    // The billboard quad
+    // This is done only once
+    glGenBuffers(1, &billboard);
+    particles->billboard = billboard;
+
+    glBindBuffer(GL_ARRAY_BUFFER, billboard);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+
+    // The positions and sizes of the particles
+    glGenBuffers(1, &positionSizes);
+    particles->positionSizes = positionSizes;
+
+    glBindBuffer(GL_ARRAY_BUFFER, positionSizes);
+    glBufferData(GL_ARRAY_BUFFER, 4 * MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+
+
+    // The colours of the particles
+    glGenBuffers(1, &colours);
+    particles->colours = colours;
+
+    glBindBuffer(GL_ARRAY_BUFFER, colours);
+    glBufferData(GL_ARRAY_BUFFER, 4 * MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+
+    particles->numParticles = 0;
+    particles->lastUsedParticle = 0;
+
+    ctx->particles = particles;
+}
+
 void init(Context &ctx)
 {
-    ctx.program = loadShaderProgram(shaderDir() + "mesh.vert",
-                                    shaderDir() + "mesh.frag");
+    ctx.program = loadShaderProgram(shaderDir() + "particle.vert",
+                                    shaderDir() + "particle.frag");
 
-    loadMesh((modelDir() + "gargo.obj"), &ctx.mesh);
-    createMeshVAO(ctx, ctx.mesh, &ctx.meshVAO);
+    initParticles(&ctx);
 
-    ctx.cubemaps = std::vector<GLuint>();
+    //loadMesh((modelDir() + "gargo.obj"), &ctx.mesh);
+    //createMeshVAO(ctx, ctx.mesh, &ctx.meshVAO);
 
+    //ctx.cubemaps = std::vector<GLuint>();
+
+    /*
     std::vector<std::string> dirs = std::vector<std::string>();
     dirs.push_back("0.125");
     dirs.push_back("0.5");
@@ -191,10 +276,12 @@ void init(Context &ctx)
         std::string dir = dirs[i];
         ctx.cubemaps.push_back(loadCubemap(cubemapDir() + "/Forrest/prefiltered/" + dir + "/"));
     }
+    */
 
     initializeTrackball(ctx);
 }
 
+/*
 // MODIFY THIS FUNCTION
 void drawMesh(Context &ctx, GLuint program, const MeshVAO &meshVAO)
 {
@@ -273,8 +360,91 @@ void drawMesh(Context &ctx, GLuint program, const MeshVAO &meshVAO)
         glDrawElements(GL_TRIANGLES, meshVAO.numIndices, GL_UNSIGNED_INT, 0);
     glBindVertexArray(ctx.defaultVAO);
 }
+*/
 
-void display(Context &ctx)
+void orphanParticleBuffer()
+{
+    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * 4 * sizeof(GLuint), NULL, GL_STREAM_DRAW);
+}
+
+void drawParticles(Context *ctx)
+{
+    /**************
+    *  Uniforms  *
+    **************/
+    
+    // Identifiers for the uniform variables
+    GLuint camera_up_id = glGetUniformLocation(ctx->program, "camera_up");
+    GLuint camera_right_id = glGetUniformLocation(ctx->program, "camera_right");
+    GLuint vp_id = glGetUniformLocation(ctx->program, "vp");
+
+    vec3 centre = vec3(0.0f, 0.0f, 0.0f);
+    vec3 cameraPos = glm::vec3(4.0f,4.0f,4.0f);
+    float fov = 0.5f;
+
+    //mat4 trackball = trackballGetRotationMatrix(ctx->trackball);
+    mat4 view = lookAt(cameraPos, centre, vec3(0.0f,1.0f,0.0f));
+    mat4 projection = perspective(fov * ctx->zoom, ctx->aspect, 0.1f, 100.0f);
+    mat4 vp = projection * view;
+
+    // Camera-local directions for billboarding
+    vec3 camera_up = vec3(vp[0][1], vp[1][1], vp[2][1]);
+    vec3 camera_right = vec3(vp[0][1], vp[1][0], vp[2][0]);
+
+    // Set uniforms
+    glUniform3fv(camera_up_id, 1, &camera_up[0]);
+    glUniform3fv(camera_right_id, 1, &camera_right[0]);
+    glUniformMatrix4fv(vp_id, 1, GL_FALSE, &vp[0][0]);
+
+
+    /***************
+    *  Particles  *
+    ***************/
+
+    // Particle data
+    Particles *particles = ctx->particles;
+    GLuint billboard = particles->billboard;
+    GLuint positionSizes = particles->positionSizes;
+    GLuint colours = particles->colours;
+    int numParticles = particles->numParticles;
+
+    // Update particle positions and sizes
+    glBindBuffer(GL_ARRAY_BUFFER, positionSizes);
+    orphanParticleBuffer();
+    glBufferSubData(GL_ARRAY_BUFFER, 0, numParticles * sizeof(GLfloat) * 4, particles->positionSizesData);
+
+    // Update particle colours
+    glBindBuffer(GL_ARRAY_BUFFER, colours);
+    orphanParticleBuffer();
+    glBufferSubData(GL_ARRAY_BUFFER, 0, numParticles * sizeof(GLubyte) * 4, particles->coloursData);
+
+    // Attach billboard corners to the vertices
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, billboard);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+    // Attach particle positions and sizes to the vertices
+    glEnableVertexAttribArray(1);
+    glBindBuffer(GL_ARRAY_BUFFER, positionSizes);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+    // Attach colours to the vertices
+    glEnableVertexAttribArray(2);
+    glBindBuffer(GL_ARRAY_BUFFER, colours);
+    glVertexAttribPointer(2, 4, GL_UNSIGNED_SHORT, GL_TRUE, 0, (void*)0);
+
+    // The billboard is the same for each particle
+    glVertexAttribDivisor(0,0);
+    // The particle position and sized advance for each particle
+    glVertexAttribDivisor(1,1);
+    // The particle colours advance for each particle
+    glVertexAttribDivisor(2,1);
+
+    // Draw all particle instances
+    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, numParticles);
+}
+
+void display(Context *ctx)
 {
     glClearColor(0.2, 0.2, 0.2, 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -282,16 +452,21 @@ void display(Context &ctx)
     //glEnable(GL_DEPTH_TEST); // ensures that polygons overlap correctly
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    drawMesh(ctx, ctx.program, ctx.meshVAO);
+    //drawMesh(ctx, ctx.program, ctx.meshVAO);
+    
+    //updateParticles(ctx)
+
+    drawParticles(ctx);
 }
 
 void reloadShaders(Context *ctx)
 {
     glDeleteProgram(ctx->program);
-    ctx->program = loadShaderProgram(shaderDir() + "mesh.vert",
-                                     shaderDir() + "mesh.frag");
+    ctx->program = loadShaderProgram(shaderDir() + "particle.vert",
+                                     shaderDir() + "particle.frag");
 }
 
+/*
 void toggleAmbient(Context *ctx)
 {
     ctx->ambient = !ctx->ambient;
@@ -321,6 +496,7 @@ void cycleCubemaps(Context *ctx)
 {
     ctx->cubemapIdx = (ctx->cubemapIdx + 1) % 8;
 }
+*/
 
 void mouseButtonPressed(Context *ctx, int button, int x, int y)
 {
@@ -365,6 +541,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
     if (key == GLFW_KEY_R && action == GLFW_PRESS) {
         reloadShaders(ctx);
     }
+    /*
     if (key == GLFW_KEY_A && action == GLFW_PRESS) {
         toggleAmbient(ctx);
     }
@@ -383,6 +560,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
     if (key == GLFW_KEY_C && action == GLFW_PRESS) {
         cycleCubemaps(ctx);
     }
+    */
 }
 
 void charCallback(GLFWwindow* window, unsigned int codepoint)
@@ -435,24 +613,31 @@ int main(void)
 
     // Create a GLFW window
     glfwSetErrorCallback(errorCallback);
+
     glfwInit();
+
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+
     ctx.width = 500;
     ctx.height = 500;
     ctx.aspect = float(ctx.width) / float(ctx.height);
-    ctx.window = glfwCreateWindow(ctx.width, ctx.height, "Model viewer", nullptr, nullptr);
+    ctx.window = glfwCreateWindow(ctx.width, ctx.height, "Particles", nullptr, nullptr);
+    ctx.zoom = 1.0f;
+    /*
     ctx.ambient = true;
     ctx.diffuse = true;
     ctx.specular = true;
     ctx.drawNormals = false;
     ctx.gammaCorrect = true;
-    ctx.zoom = 1.0f;
     ctx.cubemapIdx = 0;
+    */
+
     glfwMakeContextCurrent(ctx.window);
     glfwSetWindowUserPointer(ctx.window, &ctx);
+
     glfwSetKeyCallback(ctx.window, keyCallback);
     glfwSetCharCallback(ctx.window, charCallback);
     glfwSetMouseButtonCallback(ctx.window, mouseButtonCallback);
@@ -473,9 +658,9 @@ int main(void)
     ImGui_ImplGlfwGL3_Init(ctx.window, false /*do not install callbacks*/);
 
     // Initialize rendering
-    glGenVertexArrays(1, &ctx.defaultVAO);
-    glBindVertexArray(ctx.defaultVAO);
-    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+    //glGenVertexArrays(1, &ctx.defaultVAO);
+    //glBindVertexArray(ctx.defaultVAO);
+    //glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     init(ctx);
 
     // Start rendering loop
@@ -483,12 +668,13 @@ int main(void)
         glfwPollEvents();
         ctx.elapsed_time = glfwGetTime();
         ImGui_ImplGlfwGL3_NewFrame();
-        display(ctx);
+        display(&ctx);
         ImGui::Render();
         glfwSwapBuffers(ctx.window);
     }
 
     // Shutdown
+    free(ctx.particles);
     glfwDestroyWindow(ctx.window);
     glfwTerminate();
     std::exit(EXIT_SUCCESS);
