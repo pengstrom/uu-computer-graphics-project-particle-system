@@ -59,10 +59,15 @@ struct Particle {
     float angle;
     float weight;
     float life;
+    float cameraDistance;
+    bool operator<(const Particle& that) const {
+		// Sort in reverse order : far particles drawn first.
+		return this->cameraDistance > that.cameraDistance;
+	}
 };
 
 struct Particles {
-    Particle particles[MAX_PARTICLES];
+    Particle container[MAX_PARTICLES];
     GLuint billboard;
     GLuint positionSizes;
     GLuint colours;
@@ -77,15 +82,18 @@ struct Context {
     int width;
     int height;
     float aspect;
+    vec3 cameraPos;
     GLFWwindow *window;
     GLuint program;
     Trackball trackball;
+    GLuint vao;
     Particles *particles;
     //Mesh mesh;
     //MeshVAO meshVAO;
     //GLuint defaultVAO;
     //GLuint cubemap;
     float elapsed_time;
+    float timeDelta;
     //bool ambient;
     //bool diffuse;
     //bool specular;
@@ -199,7 +207,7 @@ void initializeTrackball(Context &ctx)
 
 void initParticles(Context *ctx)
 {
-    Particles *particles = (Particles*) malloc(sizeof(struct Particles));
+    Particles *particles = new Particles();
     if (particles == NULL) {
         fprintf(stderr, "Failed to allocate %x bytes of memory. Exiting.", sizeof(struct Particles));
         exit(-1);
@@ -216,7 +224,6 @@ void initParticles(Context *ctx)
     GLuint billboard;
     GLuint positionSizes;
     GLuint colours;
-
 
     // The billboard quad
     // This is done only once
@@ -245,6 +252,11 @@ void initParticles(Context *ctx)
     particles->numParticles = 0;
     particles->lastUsedParticle = 0;
 
+    for(int i=0; i<MAX_PARTICLES; i++){
+		particles->container[i].life = -1.0f;
+		particles->container[i].cameraDistance = -1.0f;
+	}
+
     ctx->particles = particles;
 }
 
@@ -252,6 +264,12 @@ void init(Context &ctx)
 {
     ctx.program = loadShaderProgram(shaderDir() + "particle.vert",
                                     shaderDir() + "particle.frag");
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+
+    glGenVertexArrays(1, &(ctx.vao));
+    glBindVertexArray(ctx.vao);
 
     initParticles(&ctx);
 
@@ -372,6 +390,8 @@ void drawParticles(Context *ctx)
     /**************
     *  Uniforms  *
     **************/
+
+    glUseProgram(ctx->program);
     
     // Identifiers for the uniform variables
     GLuint camera_up_id = glGetUniformLocation(ctx->program, "camera_up");
@@ -379,7 +399,7 @@ void drawParticles(Context *ctx)
     GLuint vp_id = glGetUniformLocation(ctx->program, "vp");
 
     vec3 centre = vec3(0.0f, 0.0f, 0.0f);
-    vec3 cameraPos = glm::vec3(4.0f,4.0f,4.0f);
+    vec3 cameraPos = ctx->cameraPos;
     float fov = 0.5f;
 
     //mat4 trackball = trackballGetRotationMatrix(ctx->trackball);
@@ -418,6 +438,7 @@ void drawParticles(Context *ctx)
     orphanParticleBuffer();
     glBufferSubData(GL_ARRAY_BUFFER, 0, numParticles * sizeof(GLubyte) * 4, particles->coloursData);
 
+
     // Attach billboard corners to the vertices
     glEnableVertexAttribArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, billboard);
@@ -440,8 +461,14 @@ void drawParticles(Context *ctx)
     // The particle colours advance for each particle
     glVertexAttribDivisor(2,1);
 
+    printf("Drawing %d particles.\n", particles->numParticles);
+
     // Draw all particle instances
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, numParticles);
+    
+    glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(1);
+    glDisableVertexAttribArray(2);
 }
 
 void display(Context *ctx)
@@ -449,13 +476,34 @@ void display(Context *ctx)
     glClearColor(0.2, 0.2, 0.2, 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    //glEnable(GL_DEPTH_TEST); // ensures that polygons overlap correctly
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    //drawMesh(ctx, ctx.program, ctx.meshVAO);
-    
-    //updateParticles(ctx)
 
+    /*
+    glUseProgram(ctx->program);
+    static const GLfloat vertices[] ={
+        -0.5f, -0.5f, 0.0f,
+        0.5f, -0.5f, 0.0f,
+        0.0f, 0.5f, 0.0f
+    };
+
+    GLuint buffer;
+    GLuint vao;
+
+    glGenBuffers(1, &buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+    glDraw
+    */
+    
     drawParticles(ctx);
 }
 
@@ -607,6 +655,119 @@ void resizeCallback(GLFWwindow* window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
+int findUnusedParticle(Particles *particles)
+{
+    int lastUsedParticle = particles->lastUsedParticle;
+    Particle *container = particles->container;
+
+    for(int i=lastUsedParticle; i<MAX_PARTICLES; i++){
+        if (container[i].life < 0){
+            particles->lastUsedParticle = i;
+            return i;
+        }
+    }
+
+    for(int i=0; i<lastUsedParticle; i++){
+        if (container[i].life < 0){
+            particles->lastUsedParticle = i;
+            return i;
+        }
+    }
+
+    return 0;
+}
+
+void sortParticles(Particles *particles)
+{
+    Particle *container = particles->container;
+    sort(&container[0], &container[MAX_PARTICLES]);
+}
+
+void simulateParticles(Context *ctx)
+{
+    Particles *particles = ctx->particles;
+    Particle *container = particles->container;
+
+    GLfloat *positionSizesData = particles->positionSizesData;
+    GLfloat *coloursData = particles->coloursData;
+
+    float delta = ctx->timeDelta;
+
+    vec3 cameraPos = ctx->cameraPos;
+
+    int newparticles = (int)(ctx->timeDelta*10000.0);
+    if (newparticles > (int)(0.016f*10000.0))
+        newparticles = (int)(0.016f*10000.0);
+
+    // Spawn 10 particles per millisecond
+    for(int i=0; i<newparticles; i++){
+        int particleIndex = findUnusedParticle(particles);
+        container[particleIndex].life = 5.0f; // This particle will live 5 seconds.
+        container[particleIndex].pos = glm::vec3(0,0,0.0f);
+
+        float spread = 1.5f;
+        vec3 maindir = vec3(0.0f, 10.0f, 0.0f);
+        vec3 randomdir = vec3(
+            (rand()%2000 - 1000.0f)/1000.0f,
+            (rand()%2000 - 1000.0f)/1000.0f,
+            (rand()%2000 - 1000.0f)/1000.0f
+        );
+
+        container[particleIndex].speed = maindir + randomdir*spread;
+
+
+        // Very bad way to generate a random color
+        container[particleIndex].color.x = rand() % 256;
+        container[particleIndex].color.y = rand() % 256;
+        container[particleIndex].color.z = rand() % 256;
+        container[particleIndex].color.w = (rand() % 256) / 3;
+
+        container[particleIndex].size = (rand()%1000)/2000.0f + 0.1f;
+
+    }
+
+    int numParticles = 0;
+
+    // Simulate and populate buffers
+    for(int i=0; i<MAX_PARTICLES; i++){
+
+        Particle& p = container[i];
+
+        if(p.life > 0.0f){
+
+            p.life -= delta;
+            if (p.life > 0.0f){
+
+                p.speed += glm::vec3(0.0f,-9.81f, 0.0f) * (float)delta * 0.5f;
+                p.pos += p.speed * (float)delta;
+                p.cameraDistance = glm::length2(p.pos - cameraPos);
+                //ParticlesContainer[i].pos += glm::vec3(0.0f,10.0f, 0.0f) * (float)delta;
+
+                positionSizesData[4*numParticles+0] = p.pos.x;
+                positionSizesData[4*numParticles+1] = p.pos.y;
+                positionSizesData[4*numParticles+2] = p.pos.z;
+
+                positionSizesData[4*numParticles+3] = p.size;
+
+                coloursData[4*numParticles+0] = p.color.x;
+                coloursData[4*numParticles+1] = p.color.y;
+                coloursData[4*numParticles+2] = p.color.z;
+                coloursData[4*numParticles+3] = p.color.w;
+
+            }else{
+                p.cameraDistance = -1.0f;
+            }
+
+            numParticles++;
+
+        }
+    }
+
+    particles->numParticles = numParticles;
+
+    sortParticles(particles);
+}
+
 int main(void)
 {
     Context ctx;
@@ -626,6 +787,8 @@ int main(void)
     ctx.aspect = float(ctx.width) / float(ctx.height);
     ctx.window = glfwCreateWindow(ctx.width, ctx.height, "Particles", nullptr, nullptr);
     ctx.zoom = 1.0f;
+    ctx.timeDelta = 0.016f;
+    ctx.cameraPos = glm::vec3(4.0f,4.0f,4.0f);
     /*
     ctx.ambient = true;
     ctx.diffuse = true;
@@ -666,15 +829,19 @@ int main(void)
     // Start rendering loop
     while (!glfwWindowShouldClose(ctx.window)) {
         glfwPollEvents();
-        ctx.elapsed_time = glfwGetTime();
+        float newTime = glfwGetTime();
+        float timeDelta = newTime - ctx.elapsed_time;
+        ctx.elapsed_time = newTime;
+        ctx.timeDelta = timeDelta;
         ImGui_ImplGlfwGL3_NewFrame();
+        simulateParticles(&ctx);
         display(&ctx);
         ImGui::Render();
         glfwSwapBuffers(ctx.window);
     }
 
     // Shutdown
-    free(ctx.particles);
+    delete ctx.particles;
     glfwDestroyWindow(ctx.window);
     glfwTerminate();
     std::exit(EXIT_SUCCESS);

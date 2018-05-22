@@ -30,4 +30,5 @@ void main()
     colour = particle_colour;
 
     gl_Position = billboard_position();
+    // gl_Position = vec4(0.5*billboard_vert_pos, 1);
 }
