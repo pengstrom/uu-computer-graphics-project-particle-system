@@ -20,7 +20,8 @@ uniform mat4 vp;
 uniform float max_life;
 
 vec4 billboard_position() {
-    float size = part_size;
+    float n_life = (max_life - part_life)/max_life;
+    float size = part_size * n_life;
     vec3 pos  = part_pos_ws;
          pos += camera_up * billboard_vert_pos.y * size;
          pos += camera_right * billboard_vert_pos.x * size;

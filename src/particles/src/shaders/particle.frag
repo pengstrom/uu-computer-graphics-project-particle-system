@@ -15,13 +15,13 @@ vec3 color_over_life(float life)
 {
     float age = max_life - life;
     if (age < 0.1 * max_life) {
-        return vec3(1,1,1);
+        return vec3(0.4,0.4,1);
     }
     if (age < 0.4 * max_life) {
-        return vec3(1, 0, 0);
+        return vec3(0.5, 0.5, 1);
     }
     
-    return vec3 (0.1,0.1,0.1);
+    return vec3 (0.8,0.8,1);
 }
 
 void main()
@@ -34,5 +34,5 @@ void main()
     float circle = 1-smoothstep(0.4-dxy, 0.4+dxy, norm);
 
     vec3 color = color_over_life(life);
-    frag_color = vec4(color, circle * n_life);
+    frag_color = vec4(color, circle * n_life * 0.05);
 }
