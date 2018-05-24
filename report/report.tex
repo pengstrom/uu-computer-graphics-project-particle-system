@@ -1,4 +1,4 @@
-\documentclass[a4paper]{scrartcl}
+\documentclass[a4paper, twocolumn, DIV=15]{scrartcl}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[british]{babel}
@@ -39,53 +39,36 @@
 \date{\today}
 
 \begin{document}
-\thispagestyle{empty}
 
 \maketitle
+
+\thispagestyle{empty}
 
 \section{Introduction}
 \label{sec:introduction}
 
-See book~\cite{coursebook}.
+Instancing. Fast way to draw many copies of the same geometry. The alternative, using many \texttt{glDrawArrays}, is much slower.
 
-\begin{minted}{glsl}
-// Fragment shader
-#version 150
+Billboarding. Force planar geometry to face the camera. Ensures simple geometry is visible as much as possible.
 
-uniform float u_time;
+Blending. Required for transparancy. Partices must be sorted for correct results.
 
-out vec4 frag_color;
+\section{Our approach}
+\label{sec:our_approach}
 
-void main()
-{
-    frag_color = vec4(0.0, 0.5 + 0.5*sin(30), 1.0, 1.0);
-}
-\end{minted}
+Inspired by the code from OpenGL-Tutorials~\cite{opengl-tutorial}.
 
+Send particle geometry (quad) once, same for all particles. Send particle position and properties for each particle. Use \texttt{glDrawArraysInstanced} to draw particles. Use \texttt{glVertexAttribDivisor} to specify how the buffers advance for each particle (once, but not for billboard).
+
+Billboarding by sending the camera-space up and right vectors to the vertex shader. Offset the geometry vertices with the particle position to place geometry in the world. Place model vertex into world by using the supplied up and right vectos. Makes the particles paralell to the camera image plane.
+
+Enable blending and set the mode with
 \begin{minted}{c++}
-GLuint createTriangleVAO()
-{
-    const GLfloat vertices[] = {
-        0.0f, 0.5f, 0.0f,
-        -0.5f,-0.5f, 0.0f,
-        0.5f,-0.5f, 0.0f,
-    };
-
-    GLuint vbo;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    GLuint vao;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glEnableVertexAttribArray(POSITION);
-    glVertexAttribPointer(POSITION, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-
-    return vao;
-}
+glEnable(GL_BLEND)
+glBlendFunc(GL_SRC_ALPHA,
+            GL_ONE_MINUS_SRC_ALPHA)
 \end{minted}
+so we blend on alpha channel. The particle array is sorted on camera distance so the furthest particles are drawn first.
 
 \printbibliography
 
