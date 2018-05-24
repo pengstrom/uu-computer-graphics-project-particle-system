@@ -49,9 +49,9 @@ struct Particle {
     float life;
     float cameraDistance;
     bool operator<(const Particle& that) const {
-		// Sort in reverse order : far particles drawn first.
-		return this->cameraDistance > that.cameraDistance;
-	}
+        // Sort in reverse order : far particles drawn first.
+        return this->cameraDistance > that.cameraDistance;
+    }
 };
 
 struct Particles {
@@ -188,9 +188,9 @@ void initParticles(Context *ctx)
     particles->lastUsedParticle = 0;
 
     for(int i=0; i<MAX_PARTICLES; i++){
-		particles->container[i].life = -1.0f;
-		particles->container[i].cameraDistance = -1.0f;
-	}
+        particles->container[i].life = -1.0f;
+        particles->container[i].cameraDistance = -1.0f;
+    }
 
     ctx->particles = particles;
 }
@@ -200,7 +200,10 @@ void init(Context &ctx)
     ctx.program = loadShaderProgram(shaderDir() + "particle.vert",
                                     shaderDir() + "particle.frag");
 
-	glDepthFunc(GL_LESS);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glDepthFunc(GL_LESS);
 
     glGenVertexArrays(1, &(ctx.vao));
     glBindVertexArray(ctx.vao);
@@ -308,7 +311,7 @@ void drawParticles(Context *ctx)
 
     // Draw all particle instances
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, numParticles);
-    
+
     glDisableVertexAttribArray(POSITION);
     glDisableVertexAttribArray(INSTANCE);
     glDisableVertexAttribArray(COLOUR);
@@ -321,9 +324,6 @@ void display(Context *ctx)
     glClearColor(0.2, 0.2, 0.2, 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    
     glUseProgram(ctx->program);
 
     sendUniforms(ctx);
@@ -540,25 +540,26 @@ void simulateParticles(Context *ctx)
     int numParticles = 0;
 
     // Simulate
-    for(int i=0; i<MAX_PARTICLES; i++){
+    for (int i = 0; i < MAX_PARTICLES; i++) {
 
         Particle& p = container[i];
 
-        if(p.life > 0.0f){
+        if (p.life > 0.0f) {
 
             p.life -= delta;
 
-            float nLife = (MAX_LIFE - p.life)/MAX_LIFE;
+            // Normalized age
+            float age = (MAX_LIFE - p.life)/MAX_LIFE;
 
-            vec3 wind = vec3(0.0f, 0.1f, 0.0f) * nLife;
+            vec3 wind = vec3(0.0f, 0.1f, 0.0f) * age;
 
             p.speed += glm::vec3(0.0f, 0.0f, -9.81f) * (float)delta * 0.5f;
             p.pos += (p.speed + wind) * (float)delta;
             p.cameraDistance = glm::length2(p.pos - cameraPos);
-            
+
             numParticles++;
 
-        }else{
+        } else {
             p.cameraDistance = -1.0f;
         }
     }
