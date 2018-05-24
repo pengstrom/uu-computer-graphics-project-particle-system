@@ -203,8 +203,6 @@ void init(Context &ctx)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    glDepthFunc(GL_LESS);
-
     glGenVertexArrays(1, &(ctx.vao));
     glBindVertexArray(ctx.vao);
 
