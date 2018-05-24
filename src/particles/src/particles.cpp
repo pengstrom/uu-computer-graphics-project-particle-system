@@ -18,6 +18,7 @@
 
 #include <random>
 
+#define PI 3.1415926535897932384626433832795
 #define MAX_PARTICLES 10000
 #define MAX_LIFE 5.0f
 #define MIN_LIFE 3.0f
@@ -465,11 +466,9 @@ void updateParticleData(Particles *particles)
     int numParticles = particles->numParticles;
 
     // Update buffers
-    for(int i=0; i<numParticles; i++){
+    for (int i = 0; i < numParticles; i++){
 
         Particle& p = container[i];
-
-        assert(p.life + delta > 0.0f);
 
         positionsData[3*i+0] = p.pos.x;
         positionsData[3*i+1] = p.pos.y;
@@ -496,7 +495,7 @@ void simulateParticles(Context *ctx)
 
     // Uniform distributions for random properties
     mt19937 eng = ctx->eng;
-    uniform_real_distribution<> azimuth(0,2*M_PI);
+    uniform_real_distribution<> azimuth(0,2*PI);
     uniform_real_distribution<> polar(0,SPREAD);
     uniform_real_distribution<> speed(MIN_SPEED,MAX_SPEED);
 
