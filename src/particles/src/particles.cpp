@@ -409,7 +409,10 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 
 void cursorPosCallback(GLFWwindow* window, double x, double y)
 {
-    if (ImGui::GetIO().WantCaptureMouse) { return; }  // Skip other handling   
+    if (ImGui::GetIO().WantCaptureMouse) {
+      // Skip other handling
+      return;
+    }
 
     Context *ctx = static_cast<Context *>(glfwGetWindowUserPointer(window));
     moveTrackball(ctx, x, y);
@@ -495,26 +498,26 @@ void simulateParticles(Context *ctx)
 
     // Uniform distributions for random properties
     mt19937 eng = ctx->eng;
-    uniform_real_distribution<> azimuth(0,2*PI);
-    uniform_real_distribution<> polar(0,SPREAD);
-    uniform_real_distribution<> speed(MIN_SPEED,MAX_SPEED);
+    uniform_real_distribution<> azimuth(0, 2*PI);
+    uniform_real_distribution<> polar(0, SPREAD);
+    uniform_real_distribution<> speed(MIN_SPEED, MAX_SPEED);
 
     uniform_real_distribution<> rlife(MIN_LIFE, MAX_LIFE);
 
     // Spawn 10 particles per millisecond
-    int newparticles = (int)(delta*10000.0);
-    if (newparticles > (int)(0.016f*10000.0))
-        newparticles = (int)(0.016f*10000.0);
+    int newparticles = (int)(delta * 10000.0);
+    if (newparticles > (int)(0.016f * 10000.0))
+        newparticles = (int)(0.016f * 10000.0);
 
-    for(int i=0; i<newparticles; i++){
+    for(int i = 0; i < newparticles; i++){
         int particleIndex = findUnusedParticle(particles);
         if (particleIndex == -1)
           break;
 
         Particle &p = container[particleIndex];
 
-        p.life = rlife(eng)*STRETCH;
-        p.pos = glm::vec3(0,0.0f,0.0f);
+        p.life = rlife(eng) * STRETCH;
+        p.pos = glm::vec3(0, 0.0f, 0.0f);
 
         float phi = azimuth(eng);
         float theta = polar(eng);
@@ -524,7 +527,7 @@ void simulateParticles(Context *ctx)
         float vy = r * sin(theta) * sin(phi);
         float vz = r * cos(theta);
 
-        p.speed =  vec3(vx, vy, vz);
+        p.speed = vec3(vx, vy, vz);
 
 
         // Very bad way to generate a random color
@@ -592,10 +595,11 @@ int main(void)
     ctx.width = 500;
     ctx.height = 500;
     ctx.aspect = float(ctx.width) / float(ctx.height);
-    ctx.window = glfwCreateWindow(ctx.width, ctx.height, "Particles", nullptr, nullptr);
+    ctx.window = glfwCreateWindow(ctx.width, ctx.height, "Particles", nullptr,
+                                  nullptr);
     ctx.zoom = 0.3f;
     ctx.timeDelta = 0.016f;
-    ctx.cameraPos = glm::vec3(4.0f,0.0f,0.0f);
+    ctx.cameraPos = glm::vec3(4.0f, 0.0f, 0.0f);
     ctx.eng = eng;
     ctx.rand255 = rand255;
 
