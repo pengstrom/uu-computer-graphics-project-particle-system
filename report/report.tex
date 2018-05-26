@@ -19,10 +19,12 @@
 \usepackage{mdframed}
 \surroundwithmdframed{minted}
 
+\usepackage{wrapfig}
+
 \setminted[c++]{fontsize=\footnotesize}
 \setminted[glsl]{fontsize=\footnotesize}
 
-\usepackage[sorting=nty,style=numeric]{biblatex}
+\usepackage[sorting=none,style=numeric]{biblatex}
 \bibliography{references}
 
 \renewcommand{\vec}[1]{\mathbf{#1}}
@@ -31,10 +33,10 @@
 
 \DeclareMathOperator*{\argmin}{arg\,min}
 
-\title{\LARGE Particle System Using Instancing\\
-    \normalfont \Large Computer Graphics Project}
+\title{\huge Particle System Using Instancing\\
+    \normalfont \Large Project in Computer Graphics (1TD388) -- Spring 2018}
 
-\author{Per Engström \and Jester Middendorff \and Rasmus Précenth}
+\author{Per Engström \and Jesper Middendorff \and Rasmus Précenth}
 
 \date{\today}
 
@@ -47,28 +49,70 @@
 \section{Introduction}
 \label{sec:introduction}
 
-Instancing. Fast way to draw many copies of the same geometry. The alternative, using many \texttt{glDrawArrays}, is much slower.
+Particle systems is a method used in computer graphics to create
+effects such as fire, smoke, sparks and fog. First introduced in the
+1983 movie \emph{Star Trek II -- The Wrath of Khan}~\cite{reeves1983}
+they are now abundant in both video games and movies.
 
-Billboarding. Force planar geometry to face the camera. Ensures simple geometry is visible as much as possible.
-
-Blending. Required for transparancy. Partices must be sorted for correct results.
+This project displays one particular method of rendering a particle
+system, using something called instancing. Instancing is a way to draw
+many copies of the same geometry, but only sending it once to the
+GPU. The alternative, sending the same geometry once for each
+particle, is much slower. The particles are then rendered
+back-to-front as billboards and blended to give the final result.
 
 \section{Our approach}
 \label{sec:our_approach}
 
-Inspired by the code from OpenGL-Tutorials~\cite{opengl-tutorial}.
+The system implemented in this project is based on the particle system
+tutorial in \cite{opengl-tutorial} with an additional GUI to tune the
+parameters of the system.
 
-Send particle geometry (quad) once, same for all particles. Send particle position and properties for each particle. Use \texttt{glDrawArraysInstanced} to draw particles. Use \texttt{glVertexAttribDivisor} to specify how the buffers advance for each particle (once, but not for billboard).
+Each particle in the system is rendered using billboarding by putting
+a quad in front of the camera. The vertex shader receives the quad
+vertices; the particle position, colour and time-to-live; and the
+camera up and right vectors. This makes it possible to compute the
+billboard position from just a single position per particle instead of
+four and thus make a performance saving of 75\%.
 
-Billboarding by sending the camera-space up and right vectors to the vertex shader. Offset the geometry vertices with the particle position to place geometry in the world. Place model vertex into world by using the supplied up and right vectos. Makes the particles paralell to the camera image plane.
-
-Enable blending and set the mode with
-\begin{minted}{c++}
-glEnable(GL_BLEND)
-glBlendFunc(GL_SRC_ALPHA,
-            GL_ONE_MINUS_SRC_ALPHA)
+\begin{minted}{glsl}
+vec3 particle_vert = particle_pos
+                   + up * billboard_vert.y
+                   + right * billboard_vert.x;
 \end{minted}
-so we blend on alpha channel. The particle array is sorted on camera distance so the furthest particles are drawn first.
+
+But it is possible to create an even bigger performance boost.
+\emph{Instancing} is the concept of creating geometry once and reusing
+it multiple times. In OpenGL it is acheived by binding data to the
+buffers with \texttt{glBindData}, enabling a generic vertex attribute
+array with \texttt{glEnableVertexArrayAttrib} and then pointing to the
+data with \texttt{glVertexAttribPointer}.
+\begin{table}[!h]
+  \centering
+  \begin{tabular}{r c c l}
+    Buffer & Size & Step & Elements \\
+    \hline
+    Quad & 1 & 0 & $q$ \\
+    Position & $n$ & 1 & $p_{0},p_{1},\dots,p_{n-1}$ \\
+    Colour & $n$ & 1 & $c_{0},c_{1},\dots,c_{n-1}$ \\
+    Time-to-live & $n$ & 1 & $l_{0},l_{1},\dots,l_{n-1}$ \\
+  \end{tabular}
+  \caption{Vertex attribute arrays.}
+  \label{tab:buffers}
+\end{table}
+
+\begin{wrapfigure}{R}{0.2\columnwidth}
+  \includegraphics[width=0.2\columnwidth]{smoke}
+\end{wrapfigure}
+A step size (``divisor'') needs to be set for each array which
+controls how the pointers advance through the attribute arrays. For
+the quad the step size is set to 0 since it is reused for every
+particle. All other arrays get a divisor of 1, see Table
+\ref{tab:buffers}.
+
+Finally, the particles are alpha blended together to create the final
+results. It is important to sort the particles in decreasing order
+according to their distance to the camera to produce a proper blend.
 
 \printbibliography
 
