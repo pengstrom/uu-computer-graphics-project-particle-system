@@ -1,20 +1,20 @@
 #!/bin/bash
 
-if [ -z "$ASSIGNMENT3_ROOT" ]
+if [ -z "$PROJECT_ROOT" ]
 then
-    echo "ASSIGNMENT3_ROOT is not set"
+    echo "PROJECT_ROOT is not set"
     exit 1
 fi
 
-export PARTICLE_ROOT=$ASSIGNMENT3_ROOT/particles && \
+export PARTICLE_ROOT="$PROJECT_ROOT/particles" && \
 
 # Generate build script
-cd $PARTICLE_ROOT && \
+cd "$PARTICLE_ROOT" && \
 if [ ! -d build ]; then
     mkdir build
 fi
 cd build && \
-cmake ../ -DCMAKE_INSTALL_PREFIX=$PARTICLE_ROOT && \
+cmake ../ "-DCMAKE_INSTALL_PREFIX=$PARTICLE_ROOT" && \
 
 # Build and install the program
 make -j4 && \
