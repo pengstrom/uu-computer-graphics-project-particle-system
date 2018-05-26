@@ -91,6 +91,7 @@ struct Context {
     float spread;
     float max_speed;
     float min_speed;
+    float initial_size;
 };
 
 // Returns the value of an environment variable
@@ -338,6 +339,7 @@ void gui(Context *ctx)
     ImGui::DragFloat("Spread", &ctx->spread, 0.1f, 0.0f, 3.0f);
     ImGui::DragFloat("Max speed", &ctx->max_speed, 0.1f, 0.0f, 10.0f);
     ImGui::DragFloat("Min speed", &ctx->min_speed, 0.1f, 0.0f, 10.0f);
+    ImGui::DragFloat("Particle size", &ctx->initial_size, 0.02f, 0.01f, 0.15f);
 }
 
 void reloadShaders(Context *ctx)
@@ -547,7 +549,7 @@ void simulateParticles(Context *ctx)
         p.color.b = ctx->rand255(ctx->eng);
         p.color.a = (ctx->rand255(ctx->eng) % 256) / 3;
 
-        p.size = 0.1f;
+        p.size = ctx->initial_size;
     }
 
     int numParticles = 0;
@@ -620,6 +622,7 @@ int main(void)
     ctx.spread = 0.2f;
     ctx.max_speed = 2.0f;
     ctx.min_speed = 1.0f;
+    ctx.initial_size = 0.1f;
 
     glfwMakeContextCurrent(ctx.window);
     glfwSetWindowUserPointer(ctx.window, &ctx);

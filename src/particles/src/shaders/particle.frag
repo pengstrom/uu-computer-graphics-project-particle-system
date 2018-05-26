@@ -13,15 +13,9 @@ out vec4 frag_color;
 
 vec3 color_over_life(float life)
 {
-    float age = max_life - life;
-    if (age < 0.1 * max_life) {
-        return vec3(0.4,0.4,1);
-    }
-    if (age < 0.4 * max_life) {
-        return vec3(0.5, 0.5, 1);
-    }
-    
-    return vec3 (0.8,0.8,1);
+    float n_age = 1 - life / max_life;
+    float c = 0.1 + n_age * 0.7;
+    return vec3(c, c, 1);
 }
 
 void main()
