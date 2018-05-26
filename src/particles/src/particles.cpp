@@ -234,7 +234,7 @@ void sendUniforms(Context *ctx)
     vec3 camera_right = vec3(view[0][0], view[1][0], view[2][0]);
 
     // Set uniforms
-    glUniform1f(max_life_id, ctx->max_life * STRETCH);
+    glUniform1f(max_life_id, glm::max(ctx->min_life, ctx->max_life) * STRETCH);
     glUniform3fv(camera_up_id, 1, &camera_up[0]);
     glUniform3fv(camera_right_id, 1, &camera_right[0]);
     glUniformMatrix4fv(vp_id, 1, GL_FALSE, &vp[0][0]);
@@ -330,16 +330,14 @@ void display(Context *ctx)
     drawParticles(ctx);
 }
 
-//Format is label, variable, step when draggin, minimum draggable value, maximum draggable value
-//Bug: If both of a pair are maximized you can drag the max one to any value instead, vice versa if both are minimum
-//  putting a max lower than a min or vice versa crashes the program
 void gui(Context *ctx)
 {
-    ImGui::DragFloat("Max life", &ctx->max_life, 0.1f, ctx->min_life, 15.0f);
-    ImGui::DragFloat("Min life", &ctx->min_life, 0.1f, 0.0f, ctx->max_life);
+    // Arguments: label, variable, step, minimum value, maximum value
+    ImGui::DragFloat("Max life", &ctx->max_life, 0.1f, 0.0f, 15.0f);
+    ImGui::DragFloat("Min life", &ctx->min_life, 0.1f, 0.0f, 15.0f);
     ImGui::DragFloat("Spread", &ctx->spread, 0.1f, 0.0f, 3.0f);
-    ImGui::DragFloat("Max speed", &ctx->max_speed, 0.1f, ctx->min_speed, 10.0f);
-    ImGui::DragFloat("Min speed", &ctx->min_speed, 0.1f, 0.0f, ctx->max_speed);
+    ImGui::DragFloat("Max speed", &ctx->max_speed, 0.1f, 0.0f, 10.0f);
+    ImGui::DragFloat("Min speed", &ctx->min_speed, 0.1f, 0.0f, 10.0f);
 }
 
 void reloadShaders(Context *ctx)
@@ -510,11 +508,12 @@ void simulateParticles(Context *ctx)
 
     // Uniform distributions for random properties
     mt19937 eng = ctx->eng;
-    uniform_real_distribution<> azimuth(0,2*PI);
-    uniform_real_distribution<> polar(0,ctx->spread);
-    uniform_real_distribution<> speed(ctx->min_speed,ctx->max_speed);
-
-    uniform_real_distribution<> rlife(ctx->min_life, ctx->max_life);
+    uniform_real_distribution<> azimuth(0, 2*PI);
+    uniform_real_distribution<> polar(0, ctx->spread);
+    uniform_real_distribution<> speed(glm::min(ctx->min_speed, ctx->max_speed),
+                                      glm::max(ctx->min_speed, ctx->max_speed));
+    uniform_real_distribution<> rlife(glm::min(ctx->min_life, ctx->max_life),
+                                      glm::max(ctx->min_life, ctx->max_life));
 
     // Spawn 10 particles per millisecond
     int newparticles = (int)(delta * 10000.0);
@@ -553,6 +552,8 @@ void simulateParticles(Context *ctx)
 
     int numParticles = 0;
 
+    float max_life = glm::max(ctx->min_life, ctx->max_life);
+
     // Simulate
     for (int i = 0; i < MAX_PARTICLES; i++) {
 
@@ -563,7 +564,7 @@ void simulateParticles(Context *ctx)
             p.life -= delta;
 
             // Normalized age
-            float age = (ctx->max_life - p.life)/ctx->max_life;
+            float age = (max_life - p.life) / max_life;
 
             vec3 wind = vec3(0.0f, 0.1f, 0.0f) * age;
 
