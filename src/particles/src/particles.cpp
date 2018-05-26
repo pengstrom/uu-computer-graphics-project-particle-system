@@ -43,7 +43,7 @@ struct Particle {
     float angle;
     float weight;
     float life;
-	float cameraDistance;
+    float cameraDistance;
     bool operator<(const Particle& that) const {
         // Sort in reverse order : far particles drawn first.
         return this->cameraDistance > that.cameraDistance;
@@ -86,12 +86,11 @@ struct Context {
     float elapsed_time;
     float timeDelta;
     float zoom;
-	float max_life;
-	float min_life;
-	float spread;
-	float max_speed;
-	float min_speed;
-    
+    float max_life;
+    float min_life;
+    float spread;
+    float max_speed;
+    float min_speed;
 };
 
 // Returns the value of an environment variable
@@ -333,16 +332,15 @@ void display(Context *ctx)
 
 //Format is label, variable, step when draggin, minimum draggable value, maximum draggable value
 //Bug: If both of a pair are maximized you can drag the max one to any value instead, vice versa if both are minimum
-//		putting a max lower than a min or vice versa crashes the program
+//  putting a max lower than a min or vice versa crashes the program
 void gui(Context *ctx)
 {
-	ImGui::DragFloat("Max life", &ctx->max_life, 0.1f, ctx->min_life, 15.0f);
-	ImGui::DragFloat("Min life", &ctx->min_life, 0.1f, 0.0f, ctx->max_life);
-	ImGui::DragFloat("Spread", &ctx->spread, 0.1f, 0.0f, 3.0f);
-	ImGui::DragFloat("Max speed", &ctx->max_speed, 0.1f, ctx->min_speed, 10.0f);
-	ImGui::DragFloat("Min speed", &ctx->min_speed, 0.1f, 0.0f, ctx->max_speed);
+    ImGui::DragFloat("Max life", &ctx->max_life, 0.1f, ctx->min_life, 15.0f);
+    ImGui::DragFloat("Min life", &ctx->min_life, 0.1f, 0.0f, ctx->max_life);
+    ImGui::DragFloat("Spread", &ctx->spread, 0.1f, 0.0f, 3.0f);
+    ImGui::DragFloat("Max speed", &ctx->max_speed, 0.1f, ctx->min_speed, 10.0f);
+    ImGui::DragFloat("Min speed", &ctx->min_speed, 0.1f, 0.0f, ctx->max_speed);
 }
-
 
 void reloadShaders(Context *ctx)
 {
