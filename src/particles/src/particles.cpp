@@ -20,12 +20,7 @@
 
 #define PI 3.1415926535897932384626433832795
 #define MAX_PARTICLES 10000
-#define MAX_LIFE 5.0f
-#define MIN_LIFE 3.0f
 #define STRETCH 0.1f
-#define SPREAD 0.2f
-#define MAX_SPEED 2.0f
-#define MIN_SPEED 1.0f
 
 using namespace std;
 using namespace glm;
@@ -48,7 +43,7 @@ struct Particle {
     float angle;
     float weight;
     float life;
-    float cameraDistance;
+	float cameraDistance;
     bool operator<(const Particle& that) const {
         // Sort in reverse order : far particles drawn first.
         return this->cameraDistance > that.cameraDistance;
@@ -91,6 +86,12 @@ struct Context {
     float elapsed_time;
     float timeDelta;
     float zoom;
+	float max_life;
+	float min_life;
+	float spread;
+	float max_speed;
+	float min_speed;
+    
 };
 
 // Returns the value of an environment variable
@@ -234,7 +235,7 @@ void sendUniforms(Context *ctx)
     vec3 camera_right = vec3(view[0][0], view[1][0], view[2][0]);
 
     // Set uniforms
-    glUniform1f(max_life_id, MAX_LIFE * STRETCH);
+    glUniform1f(max_life_id, ctx->max_life * STRETCH);
     glUniform3fv(camera_up_id, 1, &camera_up[0]);
     glUniform3fv(camera_right_id, 1, &camera_right[0]);
     glUniformMatrix4fv(vp_id, 1, GL_FALSE, &vp[0][0]);
@@ -329,6 +330,19 @@ void display(Context *ctx)
 
     drawParticles(ctx);
 }
+
+//Format is label, variable, step when draggin, minimum draggable value, maximum draggable value
+//Bug: If both of a pair are maximized you can drag the max one to any value instead, vice versa if both are minimum
+//		putting a max lower than a min or vice versa crashes the program
+void gui(Context *ctx)
+{
+	ImGui::DragFloat("Max life", &ctx->max_life, 0.1f, ctx->min_life, 15.0f);
+	ImGui::DragFloat("Min life", &ctx->min_life, 0.1f, 0.0f, ctx->max_life);
+	ImGui::DragFloat("Spread", &ctx->spread, 0.1f, 0.0f, 3.0f);
+	ImGui::DragFloat("Max speed", &ctx->max_speed, 0.1f, ctx->min_speed, 10.0f);
+	ImGui::DragFloat("Min speed", &ctx->min_speed, 0.1f, 0.0f, ctx->max_speed);
+}
+
 
 void reloadShaders(Context *ctx)
 {
@@ -498,11 +512,11 @@ void simulateParticles(Context *ctx)
 
     // Uniform distributions for random properties
     mt19937 eng = ctx->eng;
-    uniform_real_distribution<> azimuth(0, 2*PI);
-    uniform_real_distribution<> polar(0, SPREAD);
-    uniform_real_distribution<> speed(MIN_SPEED, MAX_SPEED);
+    uniform_real_distribution<> azimuth(0,2*PI);
+    uniform_real_distribution<> polar(0,ctx->spread);
+    uniform_real_distribution<> speed(ctx->min_speed,ctx->max_speed);
 
-    uniform_real_distribution<> rlife(MIN_LIFE, MAX_LIFE);
+    uniform_real_distribution<> rlife(ctx->min_life, ctx->max_life);
 
     // Spawn 10 particles per millisecond
     int newparticles = (int)(delta * 10000.0);
@@ -551,7 +565,7 @@ void simulateParticles(Context *ctx)
             p.life -= delta;
 
             // Normalized age
-            float age = (MAX_LIFE - p.life)/MAX_LIFE;
+            float age = (ctx->max_life - p.life)/ctx->max_life;
 
             vec3 wind = vec3(0.0f, 0.1f, 0.0f) * age;
 
@@ -602,6 +616,11 @@ int main(void)
     ctx.cameraPos = glm::vec3(4.0f, 0.0f, 0.0f);
     ctx.eng = eng;
     ctx.rand255 = rand255;
+    ctx.max_life = 5.0f;
+    ctx.min_life = 3.0f;
+    ctx.spread = 0.2f;
+    ctx.max_speed = 2.0f;
+    ctx.min_speed = 1.0f;
 
     glfwMakeContextCurrent(ctx.window);
     glfwSetWindowUserPointer(ctx.window, &ctx);
@@ -635,6 +654,8 @@ int main(void)
         ctx.elapsed_time = newTime;
         ctx.timeDelta = timeDelta;
         ImGui_ImplGlfwGL3_NewFrame();
+
+        gui(&ctx);
 
         simulateParticles(&ctx);
 
