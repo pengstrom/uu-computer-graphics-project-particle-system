@@ -445,7 +445,7 @@ int findUnusedParticle(Particles *particles)
         }
     }
 
-    return 0;
+    return -1;
 }
 
 void sortParticles(Particles *particles)
@@ -508,6 +508,8 @@ void simulateParticles(Context *ctx)
 
     for(int i=0; i<newparticles; i++){
         int particleIndex = findUnusedParticle(particles);
+        if (particleIndex == -1)
+          break;
 
         Particle &p = container[particleIndex];
 
