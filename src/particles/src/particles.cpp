@@ -95,6 +95,7 @@ struct Context {
     bool showQuads;
     bool sortParticles;
     float clearColor[3];
+    float alpha;
 };
 
 // Returns the value of an environment variable
@@ -220,6 +221,23 @@ void init(Context &ctx)
     initializeTrackball(ctx);
 }
 
+void trackCamera(Context *ctx, vec3 centre) {
+
+    vec3 &cameraPos = ctx->cameraPos;
+    mat4 t = translate(glm::mat4(1), -centre);
+    mat4 r = trackballGetRotationMatrix(ctx->trackball) * t;
+    mat4 tot = translate(r, centre);
+
+    vec4 cameraPosHom = vec4(cameraPos[0], cameraPos[1], cameraPos[2], 1.0f);
+
+    cameraPosHom = tot * cameraPosHom;
+    cameraPos[0] = cameraPosHom[0];
+    cameraPos[1] = cameraPosHom[1];
+    cameraPos[2] = cameraPosHom[2];
+    cameraPos /= cameraPosHom[3];
+}
+
+
 void sendUniforms(Context *ctx)
 {
     // Identifiers for the uniform variables
@@ -228,9 +246,13 @@ void sendUniforms(Context *ctx)
     GLuint vp_id = glGetUniformLocation(ctx->program, "vp");
     GLuint max_life_id = glGetUniformLocation(ctx->program, "max_life");
     GLuint show_quads_id = glGetUniformLocation(ctx->program, "show_quads");
+    GLuint alpha_id = glGetUniformLocation(ctx->program, "alpha");
 
     vec3 centre = vec3(0.0f, 0.0f, 0.2f);
+
+    //trackCamera(ctx, centre);
     vec3 cameraPos = ctx->cameraPos;
+
     float fov = 0.5f;
 
     //mat4 trackball = trackballGetRotationMatrix(ctx->trackball);
@@ -248,6 +270,7 @@ void sendUniforms(Context *ctx)
     glUniform3fv(camera_right_id, 1, &camera_right[0]);
     glUniformMatrix4fv(vp_id, 1, GL_FALSE, &vp[0][0]);
     glUniform1i(show_quads_id, ctx->showQuads);
+    glUniform1f(alpha_id, ctx->alpha);
 }
 
 void drawParticles(Context *ctx)
@@ -358,6 +381,8 @@ void resetParameters(Context *ctx)
     ctx->clearColor[0] = 0.2;
     ctx->clearColor[1] = 0.2;
     ctx->clearColor[2] = 0.2;
+
+    ctx->alpha = 0.05f;
 }
 
 void gui(Context *ctx)
@@ -373,11 +398,13 @@ void gui(Context *ctx)
 
     ImGui::SliderFloat("Particle size", &ctx->initial_size, 0.01f, 0.15f);
 
+    ImGui::SliderFloat("Alpha", &ctx->alpha, 0.0f, 1.0f);
+
     ImGui::ColorEdit3("Background", ctx->clearColor);
 
     ImGui::Checkbox("Show quads", &ctx->showQuads);
 
-    ImGui::Checkbox("Sort particles", &ctx->sortParticles);
+    //ImGui::Checkbox("Sort particles", &ctx->sortParticles);
 
     if (ImGui::Button("Reset parameters")) {
         resetParameters(ctx);
@@ -386,6 +413,8 @@ void gui(Context *ctx)
     if (ImGui::Button("Reset simulation")) {
         resetParticles(ctx->particles);
     }
+
+    ImGui::Text("Live particles: %6d of %d", ctx->particles->numParticles, MAX_PARTICLES);
 }
 
 void reloadShaders(Context *ctx)
@@ -515,7 +544,7 @@ void sortParticles(Particles *particles)
     std::sort(particles->container, &(particles->container[MAX_PARTICLES]));
 }
 
-void updateParticleData(Particles *particles)
+void updateParticleData(Particles *particles, float delta)
 {
     GLfloat *positionsData = particles->positionsData;
     GLfloat *sizesData = particles->sizesData;
@@ -526,9 +555,8 @@ void updateParticleData(Particles *particles)
 
     int numParticles = particles->numParticles;
 
-    // Update buffers
-    for (int i = 0; i < numParticles; i++){
-
+    /*
+    for (int i = 0; i < numParticles; ++i) {
         Particle& p = container[i];
 
         positionsData[3*i+0] = p.pos.x;
@@ -543,6 +571,32 @@ void updateParticleData(Particles *particles)
         coloursData[4*i+1] = p.color.g;
         coloursData[4*i+2] = p.color.b;
         coloursData[4*i+3] = p.color.a;
+        
+    }
+    */
+    // Update buffers
+    int processed = 0;
+    for (int i = 0; processed < numParticles; i++){
+
+        Particle& p = container[i];
+
+        if (p.life > 0.0f - delta) {
+
+            positionsData[3*processed+0] = p.pos.x;
+            positionsData[3*processed+1] = p.pos.y;
+            positionsData[3*processed+2] = p.pos.z;
+
+            sizesData[processed] = p.size;
+
+            livesData[processed] = p.life;
+
+            coloursData[4*processed+0] = p.color.r;
+            coloursData[4*processed+1] = p.color.g;
+            coloursData[4*processed+2] = p.color.b;
+            coloursData[4*processed+3] = p.color.a;
+
+            processed++;
+        }
     }
 }
 
@@ -634,7 +688,7 @@ void simulateParticles(Context *ctx)
         sortParticles(particles);
     }
 
-    updateParticleData(particles);
+    updateParticleData(particles, delta);
 }
 
 int main(void)

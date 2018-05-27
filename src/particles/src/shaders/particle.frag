@@ -9,6 +9,7 @@ in float life;
 
 uniform float max_life;
 uniform bool show_quads;
+uniform float alpha;
 
 out vec4 frag_color;
 
@@ -22,7 +23,7 @@ vec3 color_over_life(float life)
 void main()
 {
     if (show_quads) {
-        frag_color = vec4(UV, 0, 1);
+        frag_color = vec4(UV, 0, alpha);
     } else {
         float n_life = 1-(max_life - life)/max_life;
 
@@ -33,6 +34,6 @@ void main()
 
         vec3 color = color_over_life(life);
 
-        frag_color = vec4(color, circle * n_life * 0.05);
+        frag_color = vec4(color, circle * n_life * alpha);
     }
 }
