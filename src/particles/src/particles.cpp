@@ -92,6 +92,9 @@ struct Context {
     float max_speed;
     float min_speed;
     float initial_size;
+    bool showQuads;
+    bool sortParticles;
+    float clearColor[3];
 };
 
 // Returns the value of an environment variable
@@ -123,6 +126,13 @@ void initializeTrackball(Context &ctx)
     ctx.trackball.radius = radius;
     glm::vec2 center = glm::vec2(ctx.width, ctx.height) / 2.0f;
     ctx.trackball.center = center;
+}
+
+void resetParticles(Particles *particles) {
+    for(int i=0; i<MAX_PARTICLES; i++){
+        particles->container[i].life = -1.0f;
+        particles->container[i].cameraDistance = -1.0f;
+    }
 }
 
 void initParticles(Context *ctx)
@@ -189,10 +199,7 @@ void initParticles(Context *ctx)
     particles->numParticles = 0;
     particles->lastUsedParticle = 0;
 
-    for(int i=0; i<MAX_PARTICLES; i++){
-        particles->container[i].life = -1.0f;
-        particles->container[i].cameraDistance = -1.0f;
-    }
+    resetParticles(particles);
 
     ctx->particles = particles;
 }
@@ -220,6 +227,7 @@ void sendUniforms(Context *ctx)
     GLuint camera_right_id = glGetUniformLocation(ctx->program, "camera_right");
     GLuint vp_id = glGetUniformLocation(ctx->program, "vp");
     GLuint max_life_id = glGetUniformLocation(ctx->program, "max_life");
+    GLuint show_quads_id = glGetUniformLocation(ctx->program, "show_quads");
 
     vec3 centre = vec3(0.0f, 0.0f, 0.2f);
     vec3 cameraPos = ctx->cameraPos;
@@ -239,6 +247,7 @@ void sendUniforms(Context *ctx)
     glUniform3fv(camera_up_id, 1, &camera_up[0]);
     glUniform3fv(camera_right_id, 1, &camera_right[0]);
     glUniformMatrix4fv(vp_id, 1, GL_FALSE, &vp[0][0]);
+    glUniform1i(show_quads_id, ctx->showQuads);
 }
 
 void drawParticles(Context *ctx)
@@ -321,7 +330,7 @@ void drawParticles(Context *ctx)
 
 void display(Context *ctx)
 {
-    glClearColor(0.2, 0.2, 0.2, 1.0);
+    glClearColor(ctx->clearColor[0], ctx->clearColor[1], ctx->clearColor[2], 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glUseProgram(ctx->program);
@@ -331,15 +340,52 @@ void display(Context *ctx)
     drawParticles(ctx);
 }
 
+void resetParameters(Context *ctx)
+{
+    ctx->max_life = 5.0f;
+    ctx->min_life = 3.0f;
+
+    ctx->spread = 0.2f;
+
+    ctx->max_speed = 2.0f;
+    ctx->min_speed = 1.0f;
+
+    ctx->initial_size = 0.1f;
+
+    ctx->showQuads = false;
+    ctx->sortParticles = true;
+
+    ctx->clearColor[0] = 0.2;
+    ctx->clearColor[1] = 0.2;
+    ctx->clearColor[2] = 0.2;
+}
+
 void gui(Context *ctx)
 {
     // Arguments: label, variable, step, minimum value, maximum value
-    ImGui::DragFloat("Max life", &ctx->max_life, 0.1f, 0.0f, 15.0f);
-    ImGui::DragFloat("Min life", &ctx->min_life, 0.1f, 0.0f, 15.0f);
-    ImGui::DragFloat("Spread", &ctx->spread, 0.1f, 0.0f, 3.0f);
-    ImGui::DragFloat("Max speed", &ctx->max_speed, 0.1f, 0.0f, 10.0f);
-    ImGui::DragFloat("Min speed", &ctx->min_speed, 0.1f, 0.0f, 10.0f);
-    ImGui::DragFloat("Particle size", &ctx->initial_size, 0.02f, 0.01f, 0.15f);
+    ImGui::SliderFloat("Max life", &ctx->max_life, ctx->min_life, 7.0f);
+    ImGui::SliderFloat("Min life", &ctx->min_life, 0.0f, ctx->max_life);
+
+    ImGui::SliderFloat("Spread", &ctx->spread, 0.0f, PI);
+
+    ImGui::SliderFloat("Max speed", &ctx->max_speed, ctx->min_speed, 7.0f);
+    ImGui::SliderFloat("Min speed", &ctx->min_speed, 0.0f, ctx->max_speed);
+
+    ImGui::SliderFloat("Particle size", &ctx->initial_size, 0.01f, 0.15f);
+
+    ImGui::ColorEdit3("Background", ctx->clearColor);
+
+    ImGui::Checkbox("Show quads", &ctx->showQuads);
+
+    ImGui::Checkbox("Sort particles", &ctx->sortParticles);
+
+    if (ImGui::Button("Reset parameters")) {
+        resetParameters(ctx);
+    }
+
+    if (ImGui::Button("Reset simulation")) {
+        resetParticles(ctx->particles);
+    }
 }
 
 void reloadShaders(Context *ctx)
@@ -584,7 +630,9 @@ void simulateParticles(Context *ctx)
     particles->numParticles = numParticles;
 
     // Sort particles by camera distance for correct blending
-    sortParticles(particles);
+    if (ctx->sortParticles) {
+        sortParticles(particles);
+    }
 
     updateParticleData(particles);
 }
@@ -617,12 +665,8 @@ int main(void)
     ctx.cameraPos = glm::vec3(4.0f, 0.0f, 0.0f);
     ctx.eng = eng;
     ctx.rand255 = rand255;
-    ctx.max_life = 5.0f;
-    ctx.min_life = 3.0f;
-    ctx.spread = 0.2f;
-    ctx.max_speed = 2.0f;
-    ctx.min_speed = 1.0f;
-    ctx.initial_size = 0.1f;
+
+    resetParameters(&ctx);
 
     glfwMakeContextCurrent(ctx.window);
     glfwSetWindowUserPointer(ctx.window, &ctx);
