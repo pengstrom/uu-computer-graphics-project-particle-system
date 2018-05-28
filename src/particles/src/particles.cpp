@@ -32,6 +32,7 @@ enum AttributeLocation {
     SIZE,
     LIFE,
     COLOUR,
+    INIT_LIFE,
     NUM_ATTRIBUTES
 };
 
@@ -43,6 +44,7 @@ struct Particle {
     float angle;
     float weight;
     float life;
+    float initLife;
     float cameraDistance;
     bool operator<(const Particle& that) const {
         // Sort in reverse order : far particles drawn first.
@@ -58,16 +60,23 @@ struct Particles {
     GLuint positionsBuffer;
     GLuint sizesBuffer;
     GLuint livesBuffer;
+    GLuint initLivesBuffer;
     GLuint coloursBuffer;
 
     // Data for buffers
     GLfloat positionsData[3*MAX_PARTICLES];
     GLfloat sizesData[MAX_PARTICLES];
     GLfloat livesData[MAX_PARTICLES];
+    GLfloat initLivesData[MAX_PARTICLES];
     GLubyte coloursData[4*MAX_PARTICLES];
 
     int lastUsedParticle;
     int numParticles;
+    float spawnRate;
+    float initColour[4];
+    float finalColour[4];
+    float initSize;
+    float finalSize;
 };
 
 // Struct for resources and state
@@ -91,11 +100,13 @@ struct Context {
     float spread;
     float max_speed;
     float min_speed;
-    float initial_size;
+    //float initial_size;
     bool showQuads;
     bool sortParticles;
     float clearColor[3];
     float alpha;
+    float gravity;
+    float wind;
 };
 
 // Returns the value of an environment variable
@@ -157,6 +168,7 @@ void initParticles(Context *ctx)
     GLuint sizes;
     GLuint lives;
     GLuint colours;
+    GLuint initLives;
 
     // The billboard quad. This is done only once
     glGenBuffers(1, &billboard);
@@ -187,6 +199,14 @@ void initParticles(Context *ctx)
     particles->livesBuffer = lives;
 
     glBindBuffer(GL_ARRAY_BUFFER, lives);
+    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+
+
+    // The init life of the particles
+    glGenBuffers(1, &initLives);
+    particles->initLivesBuffer = initLives;
+
+    glBindBuffer(GL_ARRAY_BUFFER, initLives);
     glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
 
 
@@ -244,9 +264,12 @@ void sendUniforms(Context *ctx)
     GLuint camera_up_id = glGetUniformLocation(ctx->program, "camera_up");
     GLuint camera_right_id = glGetUniformLocation(ctx->program, "camera_right");
     GLuint vp_id = glGetUniformLocation(ctx->program, "vp");
-    GLuint max_life_id = glGetUniformLocation(ctx->program, "max_life");
     GLuint show_quads_id = glGetUniformLocation(ctx->program, "show_quads");
     GLuint alpha_id = glGetUniformLocation(ctx->program, "alpha");
+    GLuint init_col_id = glGetUniformLocation(ctx->program, "init_col");
+    GLuint final_col_id = glGetUniformLocation(ctx->program, "final_col");
+    GLuint init_size_id = glGetUniformLocation(ctx->program, "init_size");
+    GLuint final_size_id = glGetUniformLocation(ctx->program, "final_size");
 
     vec3 centre = vec3(0.0f, 0.0f, 0.2f);
 
@@ -265,12 +288,17 @@ void sendUniforms(Context *ctx)
     vec3 camera_right = vec3(view[0][0], view[1][0], view[2][0]);
 
     // Set uniforms
-    glUniform1f(max_life_id, glm::max(ctx->min_life, ctx->max_life) * STRETCH);
     glUniform3fv(camera_up_id, 1, &camera_up[0]);
     glUniform3fv(camera_right_id, 1, &camera_right[0]);
     glUniformMatrix4fv(vp_id, 1, GL_FALSE, &vp[0][0]);
     glUniform1i(show_quads_id, ctx->showQuads);
     glUniform1f(alpha_id, ctx->alpha);
+
+    glUniform1f(init_size_id, ctx->particles->initSize);
+    glUniform1f(final_size_id, ctx->particles->finalSize);
+
+    glUniform4fv(init_col_id, 1, ctx->particles->initColour);
+    glUniform4fv(final_col_id, 1, ctx->particles->finalColour);
 }
 
 void drawParticles(Context *ctx)
@@ -282,6 +310,7 @@ void drawParticles(Context *ctx)
     GLuint sizes = particles->sizesBuffer;
     GLuint lives = particles->livesBuffer;
     GLuint colours = particles->coloursBuffer;
+    GLuint initLives = particles->initLivesBuffer;
     int numParticles = particles->numParticles;
 
     // Update particle positions
@@ -298,6 +327,11 @@ void drawParticles(Context *ctx)
     glBindBuffer(GL_ARRAY_BUFFER, lives);
     glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
     glBufferSubData(GL_ARRAY_BUFFER, 0, numParticles * sizeof(GLfloat), particles->livesData);
+
+    // Update particle init lives
+    glBindBuffer(GL_ARRAY_BUFFER, initLives);
+    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, numParticles * sizeof(GLfloat), particles->initLivesData);
 
     // Update particle colours
     glBindBuffer(GL_ARRAY_BUFFER, colours);
@@ -325,6 +359,11 @@ void drawParticles(Context *ctx)
     glBindBuffer(GL_ARRAY_BUFFER, lives);
     glVertexAttribPointer(LIFE, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
 
+    // Attach particle initial lives to the vertices
+    glEnableVertexAttribArray(INIT_LIFE);
+    glBindBuffer(GL_ARRAY_BUFFER, initLives);
+    glVertexAttribPointer(INIT_LIFE, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
+
     // Attach colours to the vertices
     glEnableVertexAttribArray(COLOUR);
     glBindBuffer(GL_ARRAY_BUFFER, colours);
@@ -336,8 +375,10 @@ void drawParticles(Context *ctx)
     glVertexAttribDivisor(POSITION,1);
     // The particle sized advance for each particle
     glVertexAttribDivisor(SIZE,1);
-    // The particle sized advance for each particle
+    // The particle life advance for each particle
     glVertexAttribDivisor(LIFE,1);
+    // The particle initial life advance for each particle
+    glVertexAttribDivisor(INIT_LIFE,1);
     // The particle colours advance for each particle
     glVertexAttribDivisor(COLOUR,1);
 
@@ -349,6 +390,7 @@ void drawParticles(Context *ctx)
     glDisableVertexAttribArray(COLOUR);
     glDisableVertexAttribArray(SIZE);
     glDisableVertexAttribArray(LIFE);
+    glDisableVertexAttribArray(INIT_LIFE);
 }
 
 void display(Context *ctx)
@@ -363,17 +405,15 @@ void display(Context *ctx)
     drawParticles(ctx);
 }
 
-void resetParameters(Context *ctx)
+void presetFountain(Context *ctx)
 {
-    ctx->max_life = 5.0f;
+    ctx->max_life = 4.0f;
     ctx->min_life = 3.0f;
 
     ctx->spread = 0.2f;
 
-    ctx->max_speed = 2.0f;
     ctx->min_speed = 1.0f;
-
-    ctx->initial_size = 0.1f;
+    ctx->max_speed = 2.0f;
 
     ctx->showQuads = false;
     ctx->sortParticles = true;
@@ -382,39 +422,183 @@ void resetParameters(Context *ctx)
     ctx->clearColor[1] = 0.2;
     ctx->clearColor[2] = 0.2;
 
-    ctx->alpha = 0.05f;
+    ctx->alpha = 1.0f;
+
+    ctx->particles->spawnRate = 10.0f;
+
+    ctx->gravity = -9.82f;
+    ctx->wind = 0.2f;
+
+    ctx->particles->initColour[0] = 102.0f/255.0f;
+    ctx->particles->initColour[1] = 141.0f/255.0f;
+    ctx->particles->initColour[2] = 181.0f/255.0f;
+    ctx->particles->initColour[3] = 25.0f/255.0f;
+
+    ctx->particles->finalColour[0] = 197.0f/255.0f;
+    ctx->particles->finalColour[1] = 231.0f/255.0f;
+    ctx->particles->finalColour[2] = 1.0f;
+    ctx->particles->finalColour[3] = 0.0f;
+
+    ctx->particles->initSize = 0.01f;
+    ctx->particles->finalSize = 0.1f;
+}
+
+void presetToonTorch(Context *ctx)
+{
+    ctx->max_life = 5.0f;
+    ctx->min_life = 3.0f;
+
+    ctx->spread = 0.2f;
+
+    ctx->min_speed = 0.611f;
+    ctx->max_speed = 1.137f;
+
+    //ctx->initial_size = 0.1f;
+
+    ctx->showQuads = false;
+    ctx->sortParticles = true;
+
+    ctx->clearColor[0] = 0.2;
+    ctx->clearColor[1] = 0.2;
+    ctx->clearColor[2] = 0.2;
+
+    ctx->alpha = 1.0f;
+
+    ctx->particles->spawnRate = 2.0f;
+
+    ctx->gravity = -1.0f;
+    ctx->wind = 0.0f;
+
+    ctx->particles->initColour[0] = 200.0f/255.0f;
+    ctx->particles->initColour[1] = 0.0f;
+    ctx->particles->initColour[2] = 0.0f;
+    ctx->particles->initColour[3] = 1.0f;
+
+    ctx->particles->finalColour[0] = 0.0f;
+    ctx->particles->finalColour[1] = 0.0f;
+    ctx->particles->finalColour[2] = 0.0f;
+    ctx->particles->finalColour[3] = 1.0f;
+
+    ctx->particles->initSize = 0.2f;
+    ctx->particles->finalSize = 0.0f;
+}
+
+void presetFire(Context *ctx)
+{
+    ctx->max_life = 5.0f;
+    ctx->min_life = 3.0f;
+
+    ctx->spread = 0.2f;
+
+    ctx->min_speed = 0.611f;
+    ctx->max_speed = 1.137f;
+
+    //ctx->initial_size = 0.1f;
+
+    ctx->showQuads = false;
+    ctx->sortParticles = true;
+
+    ctx->clearColor[0] = 0.2;
+    ctx->clearColor[1] = 0.2;
+    ctx->clearColor[2] = 0.2;
+
+    ctx->alpha = 1.0f;
+
+    ctx->particles->spawnRate = 10.0f;
+
+    ctx->gravity = -2.388;
+    ctx->gravity = -0.1f;
+
+    ctx->particles->initColour[0] = 1.0f;
+    ctx->particles->initColour[1] = 131.0f/255.0f;
+    ctx->particles->initColour[2] = 64.0f/255.0f;
+    ctx->particles->initColour[3] = 47.0f/255.0f;
+
+    ctx->particles->finalColour[0] = 0.0f;
+    ctx->particles->finalColour[1] = 0.0f;
+    ctx->particles->finalColour[2] = 0.0f;
+    ctx->particles->finalColour[3] = 7.0f/255.0f;
+
+    ctx->particles->initSize = 0.01f;
+    ctx->particles->finalSize = 0.1f;
 }
 
 void gui(Context *ctx)
 {
-    // Arguments: label, variable, step, minimum value, maximum value
-    ImGui::SliderFloat("Max life", &ctx->max_life, ctx->min_life, 7.0f);
+    ImGui::Begin("Rendering options");
+
+    ImGui::Text("Spawn");
+
+    ImGui::SliderFloat("Particles per ms", &ctx->particles->spawnRate, 0.0f, 20.0f);
+
     ImGui::SliderFloat("Min life", &ctx->min_life, 0.0f, ctx->max_life);
+    ImGui::SliderFloat("Max life", &ctx->max_life, ctx->min_life, 7.0f);
 
     ImGui::SliderFloat("Spread", &ctx->spread, 0.0f, PI);
 
-    ImGui::SliderFloat("Max speed", &ctx->max_speed, ctx->min_speed, 7.0f);
     ImGui::SliderFloat("Min speed", &ctx->min_speed, 0.0f, ctx->max_speed);
+    ImGui::SliderFloat("Max speed", &ctx->max_speed, ctx->min_speed, 7.0f);
 
-    ImGui::SliderFloat("Particle size", &ctx->initial_size, 0.01f, 0.15f);
+    //ImGui::SliderFloat("Particle size", &ctx->initial_size, 0.01f, 0.15f);
 
-    ImGui::SliderFloat("Alpha", &ctx->alpha, 0.0f, 1.0f);
+    ImGui::Text("Colour");
 
-    ImGui::ColorEdit3("Background", ctx->clearColor);
+    ImGui::ColorEdit4("Initial colour", ctx->particles->initColour);
+    ImGui::ColorEdit4("Final colour", ctx->particles->finalColour);
 
-    ImGui::Checkbox("Show quads", &ctx->showQuads);
+    ImGui::Text("Size");
 
-    //ImGui::Checkbox("Sort particles", &ctx->sortParticles);
+    ImGui::SliderFloat("Initial size", &ctx->particles->initSize, 0.0f, 0.2f);
+    ImGui::SliderFloat("Final size", &ctx->particles->finalSize, 0.0f, 0.2f);
 
-    if (ImGui::Button("Reset parameters")) {
-        resetParameters(ctx);
+    ImGui::Text("Physics");
+
+    ImGui::SliderFloat("Gravity", &ctx->gravity, -20.0f, 20.0f);
+
+    ImGui::SliderFloat("Wind", &ctx->wind, -0.5f, 0.5f);
+
+    ImGui::Text("Presets");
+
+    if (ImGui::Button("Realistic fire")) {
+        resetParticles(ctx->particles);
+        presetFire(ctx);
     }
 
-    if (ImGui::Button("Reset simulation")) {
+    if (ImGui::Button("Toon torch")) {
         resetParticles(ctx->particles);
+        presetToonTorch(ctx);
+    }
+
+    if (ImGui::Button("Fountain")) {
+        resetParticles(ctx->particles);
+        presetFountain(ctx);
+    }
+
+    if (ImGui::CollapsingHeader("Debug")) {
+        ImGui::SliderFloat("Alpha", &ctx->alpha, 0.0f, 1.0f);
+
+        ImGui::ColorEdit3("Background", ctx->clearColor);
+
+        ImGui::Checkbox("Show quads", &ctx->showQuads);
+
+        //ImGui::Checkbox("Sort particles", &ctx->sortParticles);
+
+        /*
+        if (ImGui::Button("Reset parameters")) {
+            presetFire(ctx);
+        }
+        */
+
+        if (ImGui::Button("Reset simulation")) {
+            resetParticles(ctx->particles);
+        }
+
     }
 
     ImGui::Text("Live particles: %6d of %d", ctx->particles->numParticles, MAX_PARTICLES);
+    ImGui::Text("Frame rate: %.0f fps", std::trunc(1.0f/ctx->timeDelta));
+
+    ImGui::End();
 }
 
 void reloadShaders(Context *ctx)
@@ -549,6 +733,7 @@ void updateParticleData(Particles *particles, float delta)
     GLfloat *positionsData = particles->positionsData;
     GLfloat *sizesData = particles->sizesData;
     GLfloat *livesData = particles->livesData;
+    GLfloat *initLivesData = particles->initLivesData;
     GLubyte *coloursData = particles->coloursData;
 
     Particle *container = particles->container;
@@ -566,6 +751,8 @@ void updateParticleData(Particles *particles, float delta)
         sizesData[i] = p.size;
 
         livesData[i] = p.life;
+
+        initLivesData[i] = p.initLife;
 
         coloursData[4*i+0] = p.color.r;
         coloursData[4*i+1] = p.color.g;
@@ -589,6 +776,8 @@ void updateParticleData(Particles *particles, float delta)
             sizesData[processed] = p.size;
 
             livesData[processed] = p.life;
+
+            initLivesData[processed] = p.initLife;
 
             coloursData[4*processed+0] = p.color.r;
             coloursData[4*processed+1] = p.color.g;
@@ -617,10 +806,12 @@ void simulateParticles(Context *ctx)
     uniform_real_distribution<> rlife(glm::min(ctx->min_life, ctx->max_life),
                                       glm::max(ctx->min_life, ctx->max_life));
 
-    // Spawn 10 particles per millisecond
-    int newparticles = (int)(delta * 10000.0);
-    if (newparticles > (int)(0.016f * 10000.0))
-        newparticles = (int)(0.016f * 10000.0);
+    float spawnRate = 1000.0f * ctx->particles->spawnRate;
+
+    // Spawn `spawnRate` particles per second
+    int newparticles = (int)(delta * spawnRate);
+    if (newparticles > (int)(0.016f * spawnRate))
+        newparticles = (int)(0.016f * spawnRate);
 
     for(int i = 0; i < newparticles; i++){
         int particleIndex = findUnusedParticle(particles);
@@ -630,6 +821,8 @@ void simulateParticles(Context *ctx)
         Particle &p = container[particleIndex];
 
         p.life = rlife(eng) * STRETCH;
+        p.initLife = p.life;
+
         p.pos = glm::vec3(0, 0.0f, 0.0f);
 
         float phi = azimuth(eng);
@@ -649,12 +842,12 @@ void simulateParticles(Context *ctx)
         p.color.b = ctx->rand255(ctx->eng);
         p.color.a = (ctx->rand255(ctx->eng) % 256) / 3;
 
-        p.size = ctx->initial_size;
+        p.size = ctx->particles->initSize;
     }
 
     int numParticles = 0;
 
-    float max_life = glm::max(ctx->min_life, ctx->max_life);
+    // float max_life = glm::max(ctx->min_life, ctx->max_life);
 
     // Simulate
     for (int i = 0; i < MAX_PARTICLES; i++) {
@@ -666,13 +859,15 @@ void simulateParticles(Context *ctx)
             p.life -= delta;
 
             // Normalized age
-            float age = (max_life - p.life) / max_life;
+            float age = (p.initLife - p.life) / p.initLife;
 
-            vec3 wind = vec3(0.0f, 0.1f, 0.0f) * age;
+            vec3 wind = vec3(0.0f, ctx->wind, 0.0f) * age;
 
-            p.speed += glm::vec3(0.0f, 0.0f, -9.81f) * (float)delta * 0.5f;
+            p.speed += glm::vec3(0.0f, 0.0f, ctx->gravity) * (float)delta * 0.5f;
             p.pos += (p.speed + wind) * (float)delta;
             p.cameraDistance = glm::length2(p.pos - cameraPos);
+
+            p.size = (1-age) * ctx->particles->initSize + age * ctx->particles->finalSize;
 
             numParticles++;
 
@@ -720,8 +915,6 @@ int main(void)
     ctx.eng = eng;
     ctx.rand255 = rand255;
 
-    resetParameters(&ctx);
-
     glfwMakeContextCurrent(ctx.window);
     glfwSetWindowUserPointer(ctx.window, &ctx);
 
@@ -745,6 +938,8 @@ int main(void)
     ImGui_ImplGlfwGL3_Init(ctx.window, false /*do not install callbacks*/);
 
     init(ctx);
+
+    presetFire(&ctx);
 
     // Start rendering loop
     while (!glfwWindowShouldClose(ctx.window)) {

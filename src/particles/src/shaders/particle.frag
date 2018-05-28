@@ -6,18 +6,19 @@ in vec3 pos_ws;
 in vec4 colour;
 in float size;
 in float life;
+in float max_life;
 
-uniform float max_life;
 uniform bool show_quads;
 uniform float alpha;
+uniform vec4 init_col;
+uniform vec4 final_col;
 
 out vec4 frag_color;
 
-vec3 color_over_life(float life)
+vec4 colour_over_life(float life)
 {
     float n_age = 1 - life / max_life;
-    float c = 0.1 + n_age * 0.7;
-    return vec3(c, c, 1);
+    return (1-n_age) * init_col + n_age * final_col;
 }
 
 void main()
@@ -32,8 +33,8 @@ void main()
         float dxy = fwidth(norm);
         float circle = 1-smoothstep(0.4-dxy, 0.4+dxy, norm);
 
-        vec3 color = color_over_life(life);
+        vec4 colour = colour_over_life(life);
 
-        frag_color = vec4(color, circle * n_life * alpha);
+        frag_color = vec4(colour.rgb, circle * colour.a * alpha);
     }
 }
