@@ -22,8 +22,8 @@ uniform mat4 vp;
 
 vec4 billboard_position() {
     vec3 pos  = part_pos_ws;
-         pos += camera_up * billboard_vert_pos.y * part_size;
-         pos += camera_right * billboard_vert_pos.x * part_size;
+         pos += camera_up * billboard_vert_pos.y * part_size * (0.5/0.9);
+         pos += camera_right * billboard_vert_pos.x * part_size * (0.5/0.9);
 
     return vp * vec4(pos, 1);
 }

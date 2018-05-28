@@ -77,6 +77,8 @@ struct Particles {
     float finalColour[4];
     float initSize;
     float finalSize;
+    float initFuzz;
+    float finalFuzz;
 };
 
 // Struct for resources and state
@@ -100,7 +102,6 @@ struct Context {
     float spread;
     float max_speed;
     float min_speed;
-    //float initial_size;
     bool showQuads;
     bool sortParticles;
     float clearColor[3];
@@ -264,12 +265,18 @@ void sendUniforms(Context *ctx)
     GLuint camera_up_id = glGetUniformLocation(ctx->program, "camera_up");
     GLuint camera_right_id = glGetUniformLocation(ctx->program, "camera_right");
     GLuint vp_id = glGetUniformLocation(ctx->program, "vp");
+
     GLuint show_quads_id = glGetUniformLocation(ctx->program, "show_quads");
     GLuint alpha_id = glGetUniformLocation(ctx->program, "alpha");
+
     GLuint init_col_id = glGetUniformLocation(ctx->program, "init_col");
     GLuint final_col_id = glGetUniformLocation(ctx->program, "final_col");
+
     GLuint init_size_id = glGetUniformLocation(ctx->program, "init_size");
     GLuint final_size_id = glGetUniformLocation(ctx->program, "final_size");
+
+    GLuint init_fuzz_id = glGetUniformLocation(ctx->program, "init_fuzz");
+    GLuint final_fuzz_id = glGetUniformLocation(ctx->program, "final_fuzz");
 
     vec3 centre = vec3(0.0f, 0.0f, 0.2f);
 
@@ -296,6 +303,9 @@ void sendUniforms(Context *ctx)
 
     glUniform1f(init_size_id, ctx->particles->initSize);
     glUniform1f(final_size_id, ctx->particles->finalSize);
+
+    glUniform1f(init_fuzz_id, ctx->particles->initFuzz);
+    glUniform1f(final_fuzz_id, ctx->particles->finalFuzz);
 
     glUniform4fv(init_col_id, 1, ctx->particles->initColour);
     glUniform4fv(final_col_id, 1, ctx->particles->finalColour);
@@ -441,6 +451,9 @@ void presetFountain(Context *ctx)
 
     ctx->particles->initSize = 0.01f;
     ctx->particles->finalSize = 0.1f;
+
+    ctx->particles->initFuzz = 0.0f;
+    ctx->particles->finalFuzz = 0.0f;
 }
 
 void presetToonTorch(Context *ctx)
@@ -452,8 +465,6 @@ void presetToonTorch(Context *ctx)
 
     ctx->min_speed = 0.611f;
     ctx->max_speed = 1.137f;
-
-    //ctx->initial_size = 0.1f;
 
     ctx->showQuads = false;
     ctx->sortParticles = true;
@@ -481,6 +492,50 @@ void presetToonTorch(Context *ctx)
 
     ctx->particles->initSize = 0.2f;
     ctx->particles->finalSize = 0.0f;
+
+    ctx->particles->initFuzz = 0.0f;
+    ctx->particles->finalFuzz = 0.0f;
+}
+
+void presetComet(Context *ctx)
+{
+    ctx->max_life = 0.873f;
+    ctx->min_life = 4.128f;
+
+    ctx->spread = 1.269f;
+
+    ctx->min_speed = 0.0f;
+    ctx->max_speed = 0.718f;
+
+    ctx->showQuads = false;
+    ctx->sortParticles = true;
+
+    ctx->clearColor[0] = 0.2;
+    ctx->clearColor[1] = 0.2;
+    ctx->clearColor[2] = 0.2;
+
+    ctx->alpha = 1.0f;
+
+    ctx->particles->spawnRate = 20.0f;
+
+    ctx->gravity = 20.0f;
+    ctx->wind = 0.0f;
+
+    ctx->particles->initColour[0] = 134.0f/255.0f;
+    ctx->particles->initColour[1] = 1.0f;
+    ctx->particles->initColour[2] = 0.5f;
+    ctx->particles->initColour[3] = 28.0f/255.0f;
+
+    ctx->particles->finalColour[0] = 0.0f;
+    ctx->particles->finalColour[1] = 91.0f/255.0f;
+    ctx->particles->finalColour[2] = 9.0f/255.0f;
+    ctx->particles->finalColour[3] = 99.0f/255.0f;
+
+    ctx->particles->initSize = 0.047f;
+    ctx->particles->finalSize = 0.0f;
+
+    ctx->particles->initFuzz = 0.5f;
+    ctx->particles->finalFuzz = 0.0f;
 }
 
 void presetFire(Context *ctx)
@@ -492,8 +547,6 @@ void presetFire(Context *ctx)
 
     ctx->min_speed = 0.611f;
     ctx->max_speed = 1.137f;
-
-    //ctx->initial_size = 0.1f;
 
     ctx->showQuads = false;
     ctx->sortParticles = true;
@@ -507,7 +560,7 @@ void presetFire(Context *ctx)
     ctx->particles->spawnRate = 10.0f;
 
     ctx->gravity = -2.388;
-    ctx->gravity = -0.1f;
+    ctx->wind = 0.1f;
 
     ctx->particles->initColour[0] = 1.0f;
     ctx->particles->initColour[1] = 131.0f/255.0f;
@@ -521,6 +574,9 @@ void presetFire(Context *ctx)
 
     ctx->particles->initSize = 0.01f;
     ctx->particles->finalSize = 0.1f;
+
+    ctx->particles->initFuzz = 0.05f;
+    ctx->particles->finalFuzz = 0.4f;
 }
 
 void gui(Context *ctx)
@@ -539,12 +595,13 @@ void gui(Context *ctx)
     ImGui::SliderFloat("Min speed", &ctx->min_speed, 0.0f, ctx->max_speed);
     ImGui::SliderFloat("Max speed", &ctx->max_speed, ctx->min_speed, 7.0f);
 
-    //ImGui::SliderFloat("Particle size", &ctx->initial_size, 0.01f, 0.15f);
-
     ImGui::Text("Colour");
 
     ImGui::ColorEdit4("Initial colour", ctx->particles->initColour);
     ImGui::ColorEdit4("Final colour", ctx->particles->finalColour);
+
+    ImGui::SliderFloat("Initial fuzzyness", &ctx->particles->initFuzz, 0.0f, 1.0f);
+    ImGui::SliderFloat("Final fuzzyness", &ctx->particles->finalFuzz, 0.0f, 1.0f);
 
     ImGui::Text("Size");
 
@@ -574,20 +631,17 @@ void gui(Context *ctx)
         presetFountain(ctx);
     }
 
+    if (ImGui::Button("Green comet")) {
+        resetParticles(ctx->particles);
+        presetComet(ctx);
+    }
+
     if (ImGui::CollapsingHeader("Debug")) {
         ImGui::SliderFloat("Alpha", &ctx->alpha, 0.0f, 1.0f);
 
         ImGui::ColorEdit3("Background", ctx->clearColor);
 
         ImGui::Checkbox("Show quads", &ctx->showQuads);
-
-        //ImGui::Checkbox("Sort particles", &ctx->sortParticles);
-
-        /*
-        if (ImGui::Button("Reset parameters")) {
-            presetFire(ctx);
-        }
-        */
 
         if (ImGui::Button("Reset simulation")) {
             resetParticles(ctx->particles);
@@ -724,7 +778,6 @@ int findUnusedParticle(Particles *particles)
 
 void sortParticles(Particles *particles)
 {
-    //Particle *container = particles->container;
     std::sort(particles->container, &(particles->container[MAX_PARTICLES]));
 }
 
@@ -740,27 +793,6 @@ void updateParticleData(Particles *particles, float delta)
 
     int numParticles = particles->numParticles;
 
-    /*
-    for (int i = 0; i < numParticles; ++i) {
-        Particle& p = container[i];
-
-        positionsData[3*i+0] = p.pos.x;
-        positionsData[3*i+1] = p.pos.y;
-        positionsData[3*i+2] = p.pos.z;
-
-        sizesData[i] = p.size;
-
-        livesData[i] = p.life;
-
-        initLivesData[i] = p.initLife;
-
-        coloursData[4*i+0] = p.color.r;
-        coloursData[4*i+1] = p.color.g;
-        coloursData[4*i+2] = p.color.b;
-        coloursData[4*i+3] = p.color.a;
-        
-    }
-    */
     // Update buffers
     int processed = 0;
     for (int i = 0; processed < numParticles; i++){
@@ -846,8 +878,6 @@ void simulateParticles(Context *ctx)
     }
 
     int numParticles = 0;
-
-    // float max_life = glm::max(ctx->min_life, ctx->max_life);
 
     // Simulate
     for (int i = 0; i < MAX_PARTICLES; i++) {
