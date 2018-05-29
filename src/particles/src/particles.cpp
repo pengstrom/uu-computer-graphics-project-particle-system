@@ -10,6 +10,7 @@
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/rotate_vector.hpp>
 #include <glm/gtc/constants.hpp>
 
 #include <iostream>
@@ -79,6 +80,7 @@ struct Particles {
     float finalSize;
     float initFuzz;
     float finalFuzz;
+    vec3 muzzle;
 };
 
 // Struct for resources and state
@@ -108,6 +110,8 @@ struct Context {
     float alpha;
     float gravity;
     float wind;
+    bool add;
+    bool shake;
 };
 
 // Returns the value of an environment variable
@@ -232,7 +236,8 @@ void init(Context &ctx)
                                     shaderDir() + "particle.frag");
 
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
     glGenVertexArrays(1, &(ctx.vao));
     glBindVertexArray(ctx.vao);
@@ -259,7 +264,7 @@ void trackCamera(Context *ctx, vec3 centre) {
 }
 
 
-void sendUniforms(Context *ctx)
+void sceneSetup(Context *ctx)
 {
     // Identifiers for the uniform variables
     GLuint camera_up_id = glGetUniformLocation(ctx->program, "camera_up");
@@ -280,8 +285,15 @@ void sendUniforms(Context *ctx)
 
     vec3 centre = vec3(0.0f, 0.0f, 0.2f);
 
+    mt19937 eng = ctx->eng;
+    uniform_real_distribution<> noise(-1, 1);
+
     //trackCamera(ctx, centre);
     vec3 cameraPos = ctx->cameraPos;
+
+    if (ctx->shake) {
+        centre += vec3(0.0f, 0.003*noise(eng), 0.003*noise(eng));
+    }
 
     float fov = 0.5f;
 
@@ -408,9 +420,15 @@ void display(Context *ctx)
     glClearColor(ctx->clearColor[0], ctx->clearColor[1], ctx->clearColor[2], 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    if (ctx->add && !ctx->showQuads) {
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    } else {
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+
     glUseProgram(ctx->program);
 
-    sendUniforms(ctx);
+    sceneSetup(ctx);
 
     drawParticles(ctx);
 }
@@ -454,6 +472,10 @@ void presetFountain(Context *ctx)
 
     ctx->particles->initFuzz = 0.0f;
     ctx->particles->finalFuzz = 0.0f;
+
+    ctx->add = false;
+
+    ctx->shake = false;
 }
 
 void presetSmoke(Context *ctx)
@@ -536,6 +558,10 @@ void presetToonTorch(Context *ctx)
 
     ctx->particles->initFuzz = 0.0f;
     ctx->particles->finalFuzz = 0.0f;
+
+    ctx->add = false;
+
+    ctx->shake = false;
 }
 
 void presetComet(Context *ctx)
@@ -577,6 +603,10 @@ void presetComet(Context *ctx)
 
     ctx->particles->initFuzz = 0.5f;
     ctx->particles->finalFuzz = 0.0f;
+
+    ctx->add = true;
+
+    ctx->shake = true;
 }
 
 void presetFire(Context *ctx)
@@ -618,6 +648,10 @@ void presetFire(Context *ctx)
 
     ctx->particles->initFuzz = 0.05f;
     ctx->particles->finalFuzz = 0.4f;
+
+    ctx->add = true;
+
+    ctx->shake = false;
 }
 
 void gui(Context *ctx)
@@ -636,6 +670,10 @@ void gui(Context *ctx)
     ImGui::SliderFloat("Min speed", &ctx->min_speed, 0.0f, ctx->max_speed);
     ImGui::SliderFloat("Max speed", &ctx->max_speed, ctx->min_speed, 7.0f);
 
+    ImGui::SliderFloat3("Direction", &ctx->particles->muzzle[0], -1.0f, 1.0f);
+
+    ImGui::Spacing();
+
     ImGui::Text("Colour");
 
     ImGui::ColorEdit4("Initial colour", ctx->particles->initColour);
@@ -644,16 +682,30 @@ void gui(Context *ctx)
     ImGui::SliderFloat("Initial fuzziness", &ctx->particles->initFuzz, 0.0f, 1.0f);
     ImGui::SliderFloat("Final fuzziness", &ctx->particles->finalFuzz, 0.0f, 1.0f);
 
+    ImGui::Checkbox("Additive blend", &ctx->add);
+
+    ImGui::Spacing();
+
     ImGui::Text("Size");
 
     ImGui::SliderFloat("Initial size", &ctx->particles->initSize, 0.0f, 0.2f);
     ImGui::SliderFloat("Final size", &ctx->particles->finalSize, 0.0f, 0.2f);
+
+    ImGui::Spacing();
 
     ImGui::Text("Physics");
 
     ImGui::SliderFloat("Gravity", &ctx->gravity, -20.0f, 20.0f);
 
     ImGui::SliderFloat("Wind", &ctx->wind, -0.5f, 0.5f);
+
+    ImGui::Spacing();
+
+    ImGui::Text("Misc");
+
+    ImGui::Checkbox("Camera shake", &ctx->shake);
+
+    ImGui::Spacing();
 
     ImGui::Text("Presets");
 
@@ -694,6 +746,8 @@ void gui(Context *ctx)
         }
 
     }
+
+    ImGui::Spacing();
 
     ImGui::Text("Live particles: %6d of %d", ctx->particles->numParticles, MAX_PARTICLES);
     ImGui::Text("Frame rate: %.0f fps", std::trunc(1.0f/ctx->timeDelta));
@@ -911,8 +965,16 @@ void simulateParticles(Context *ctx)
         float vy = r * sin(theta) * sin(phi);
         float vz = r * cos(theta);
 
-        p.speed = vec3(vx, vy, vz);
+        //p.speed = vec3(vx, vy, vz);
+        vec4 speed = vec4(vx, vy, vz, 1);
+        vec3 muzzle = glm::normalize(ctx->particles->muzzle);
+        mat4 rotMat = glm::orientation(muzzle, vec3(0.0f, 1.0f, 0.0f));
+        vec4 speedRot = rotMat * speed;
 
+        p.speed[0] = speed[0];
+        p.speed[1] = speed[1];
+        p.speed[2] = speed[2];
+        p.speed /= speed[3];
 
         // Very bad way to generate a random color
         p.color.r = ctx->rand255(ctx->eng);
