@@ -456,6 +456,47 @@ void presetFountain(Context *ctx)
     ctx->particles->finalFuzz = 0.0f;
 }
 
+void presetSmoke(Context *ctx)
+{
+    ctx->max_life = 7.0f;
+    ctx->min_life = 4.0f;
+
+    ctx->spread = PI;
+
+    ctx->min_speed = 0.0f;
+    ctx->max_speed = 0.3f;
+
+    ctx->showQuads = false;
+    ctx->sortParticles = true;
+
+    ctx->clearColor[0] = 0.2;
+    ctx->clearColor[1] = 0.2;
+    ctx->clearColor[2] = 0.2;
+
+    ctx->alpha = 1.0f;
+
+    ctx->particles->spawnRate = 10.0f;
+
+    ctx->gravity = 3.5f;
+    ctx->wind = -0.2f;
+
+    ctx->particles->initColour[0] = 145.0f/255.0f;
+    ctx->particles->initColour[1] = 145.0f/255.0f;
+    ctx->particles->initColour[2] = 145.0f/255.0f;
+    ctx->particles->initColour[3] = 70.0f/255.0f;
+
+    ctx->particles->finalColour[0] = 51.0f/255.0f;
+    ctx->particles->finalColour[1] = 51.0f/255.0f;
+    ctx->particles->finalColour[2] = 51.0f/255.0f;
+    ctx->particles->finalColour[3] = 10.0f/255.0f;
+
+    ctx->particles->initSize = 0.0f;
+    ctx->particles->finalSize = 0.2f;
+
+    ctx->particles->initFuzz = 0.5f;
+    ctx->particles->finalFuzz = 0.9f;
+}
+
 void presetToonTorch(Context *ctx)
 {
     ctx->max_life = 5.0f;
@@ -634,6 +675,11 @@ void gui(Context *ctx)
     if (ImGui::Button("Green comet")) {
         resetParticles(ctx->particles);
         presetComet(ctx);
+    }
+
+    if (ImGui::Button("Smoke")) {
+        resetParticles(ctx->particles);
+        presetSmoke(ctx);
     }
 
     if (ImGui::CollapsingHeader("Debug")) {
