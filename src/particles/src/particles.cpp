@@ -517,6 +517,9 @@ void presetSmoke(Context *ctx)
 
     ctx->particles->initFuzz = 0.5f;
     ctx->particles->finalFuzz = 0.9f;
+
+    ctx->add = false;
+    ctx->shake = false;
 }
 
 void presetToonTorch(Context *ctx)
