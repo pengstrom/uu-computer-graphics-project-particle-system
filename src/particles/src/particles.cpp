@@ -600,8 +600,8 @@ void gui(Context *ctx)
     ImGui::ColorEdit4("Initial colour", ctx->particles->initColour);
     ImGui::ColorEdit4("Final colour", ctx->particles->finalColour);
 
-    ImGui::SliderFloat("Initial fuzzyness", &ctx->particles->initFuzz, 0.0f, 1.0f);
-    ImGui::SliderFloat("Final fuzzyness", &ctx->particles->finalFuzz, 0.0f, 1.0f);
+    ImGui::SliderFloat("Initial fuzziness", &ctx->particles->initFuzz, 0.0f, 1.0f);
+    ImGui::SliderFloat("Final fuzziness", &ctx->particles->finalFuzz, 0.0f, 1.0f);
 
     ImGui::Text("Size");
 
