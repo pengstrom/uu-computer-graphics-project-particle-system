@@ -1,4 +1,4 @@
-# Computer Graphics, Assignment 3, Part 1 and 2
+# Computer Graphics, Project
 
-Follow the build instructions from Assignment 2, but replace
-ASSIGNMENT2_ROOT with ASSIGNMENT3_ROOT.
+The build instructions are the same as all of the labs except that the
+environment variable required to be set is `PROJECT_ROOT`.
