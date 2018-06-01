@@ -80,7 +80,6 @@ struct Particles {
     float finalSize;
     float initFuzz;
     float finalFuzz;
-    vec3 muzzle;
 };
 
 // Struct for resources and state
@@ -673,8 +672,6 @@ void gui(Context *ctx)
     ImGui::SliderFloat("Min speed", &ctx->min_speed, 0.0f, ctx->max_speed);
     ImGui::SliderFloat("Max speed", &ctx->max_speed, ctx->min_speed, 7.0f);
 
-    ImGui::SliderFloat3("Direction", &ctx->particles->muzzle[0], -1.0f, 1.0f);
-
     ImGui::Spacing();
 
     ImGui::Text("Colour");
@@ -968,11 +965,7 @@ void simulateParticles(Context *ctx)
         float vy = r * sin(theta) * sin(phi);
         float vz = r * cos(theta);
 
-        //p.speed = vec3(vx, vy, vz);
         vec4 speed = vec4(vx, vy, vz, 1);
-        vec3 muzzle = glm::normalize(ctx->particles->muzzle);
-        mat4 rotMat = glm::orientation(muzzle, vec3(0.0f, 1.0f, 0.0f));
-        vec4 speedRot = rotMat * speed;
 
         p.speed[0] = speed[0];
         p.speed[1] = speed[1];
